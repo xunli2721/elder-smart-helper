@@ -1,0 +1,50 @@
+{
+  "name": "ElderSmartHelper",
+  "displayName": "ElderSmartHelper",
+  "version": "1.0.0",
+  "description": "中老年人智能手机使用智能助手",
+  "orientation": "portrait",
+  "icon": "./assets/icons/app-icon.png",
+  "splash": {
+    "image": "./assets/splash/splash.png",
+    "resizeMode": "contain",
+    "backgroundColor": "#4A90E2"
+  },
+  "updates": {
+    "fallbackToCacheTimeout": 0
+  },
+  "assetBundlePatterns": [
+    "**/*"
+  ],
+  "ios": {
+    "supportsTablet": true,
+    "bundleIdentifier": "com.eldersmarthelper.app",
+    "buildNumber": "1",
+    "infoPlist": {
+      "NSMicrophoneUsageDescription": "应用需要访问麦克风以支持语音助手功能",
+      "NSCameraUsageDescription": "应用需要访问相机以支持扫码和视频通话功能",
+      "NSPhotoLibraryUsageDescription": "应用需要访问相册以支持图片上传功能",
+      "NSLocationWhenInUseUsageDescription": "应用需要访问位置以支持定位服务",
+      "UIBackgroundModes": ["audio", "remote-notification"]
+    }
+  },
+  "android": {
+    "package": "com.eldersmarthelper.app",
+    "versionCode": 1,
+    "permissions": [
+      "android.permission.RECORD_AUDIO",
+      "android.permission.CAMERA",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.VIBRATE",
+      "android.permission.INTERNET",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.WAKE_LOCK"
+    ]
+  },
+  "web": {
+    "favicon": "./assets/icons/favicon.png"
+  }
+}
