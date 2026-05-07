@@ -1,56 +1,22 @@
 {
   "name": "elder-smart-helper-server",
-  "version": "1.0.0",
-  "description": "Backend server for ElderSmartHelper - smartphone assistant for elderly users",
+  "version": "2.0.0",
+  "description": "ElderSmartHelper Backend API",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "lint": "eslint src/",
-    "format": "prettier --write \"src/**/*.js\"",
-    "migrate:up": "node scripts/migrate.js up",
-    "migrate:down": "node scripts/migrate.js down",
-    "seed": "node scripts/seed.js"
+    "dev": "nodemon src/index.js"
   },
-  "keywords": [
-    "elderly",
-    "smartphone",
-    "assistant",
-    "ai",
-    "remote-assistance",
-    "accessibility"
-  ],
-  "author": "ElderSmartHelper Team",
-  "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.0.0",
-    "morgan": "^1.10.0",
-    "dotenv": "^16.0.3",
-    "jsonwebtoken": "^9.0.0",
     "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
     "mysql2": "^3.3.3",
-    "redis": "^4.6.5",
-    "socket.io": "^4.6.1",
-    "joi": "^17.9.2",
-    "multer": "^1.4.5-lts.1",
-    "axios": "^1.4.0",
-    "winston": "^3.9.0",
-    "node-cron": "^3.0.2"
+    "socket.io": "^4.6.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.0",
-    "jest": "^29.5.0",
-    "supertest": "^6.3.3",
-    "eslint": "^8.41.0",
-    "eslint-config-prettier": "^8.8.0",
-    "prettier": "^2.8.8"
-  },
-  "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
+    "nodemon": "^3.0.1"
   }
 }
