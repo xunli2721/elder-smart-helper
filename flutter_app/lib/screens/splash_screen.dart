@@ -43,7 +43,7 @@ class _SplashScreenState extends State<SplashScreen> {
       if (result['success'] == true) {
         // 同步服务端字体设置
         final serverFontSize = result['data']['font_size'] ?? 'large';
-        await fontProvider.update(serverFontSize);
+        await fontProvider.setFromServer(serverFontSize);
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -76,18 +76,18 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             const Icon(Icons.phone_android, size: 100, color: Colors.white),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '智能助手',
               style: TextStyle(
-                fontSize: 36,
+                fontSize: context.read<FontSizeProvider>().scaled(36),
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '中老年人智能手机助手',
-              style: TextStyle(fontSize: 18, color: Colors.white70),
+              style: TextStyle(fontSize: context.read<FontSizeProvider>().scaled(18), color: Colors.white70),
             ),
             const SizedBox(height: 48),
             const CircularProgressIndicator(color: Colors.white),

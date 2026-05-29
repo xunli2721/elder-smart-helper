@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
         // 同步字体设置到 Provider
         final serverFontSize = result['data']['user']?['font_size'] ?? 'large';
         if (mounted) {
-          await context.read<FontSizeProvider>().update(serverFontSize);
+          await context.read<FontSizeProvider>().setFromServer(serverFontSize);
         }
         if (!mounted) return;
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainScreen()));

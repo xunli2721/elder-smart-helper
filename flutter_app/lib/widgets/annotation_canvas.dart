@@ -30,7 +30,7 @@ class AnnotationCanvas extends StatefulWidget {
 
   const AnnotationCanvas({
     super.key,
-    required this.imageBytes,
+    required this.image,
     required this.onComplete,
   });
 
@@ -40,6 +40,7 @@ class AnnotationCanvas extends StatefulWidget {
 
 class _AnnotationCanvasState extends State<AnnotationCanvas> {
   final GlobalKey _repaintKey = GlobalKey();
+  ui.Image? _bgImage;
   AnnotationTool _currentTool = AnnotationTool.pen;
   Color _currentColor = Colors.red;
   final List<AnnotationItem> _items = [];
@@ -55,6 +56,22 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
   double _prevScale = 1.0;
   Offset _offset = Offset.zero;
   Offset _prevOffset = Offset.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackgroundImage();
+  }
+
+  Future<void> _loadBackgroundImage() async {
+    final codec = await ui.instantiateImageCodec(widget.imageBytes);
+    final frame = await codec.getNextFrame();
+    if (mounted) {
+      setState(() {
+        _bgImage = frame.image;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -218,7 +235,7 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
                 key: _repaintKey,
                 child: CustomPaint(
                   painter: _AnnotationPainter(
-                    imageBytes: widget.imageBytes,
+                    image: _bgImage,
                     items: _items,
                     currentPoints: _currentPoints,
                     currentTool: _currentTool,
@@ -315,7 +332,7 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
 }
 
 class _AnnotationPainter extends CustomPainter {
-  final Uint8List imageBytes;
+  final ui.Image? image;
   final List<AnnotationItem> items;
   final List<Offset> currentPoints;
   final AnnotationTool currentTool;
@@ -323,10 +340,10 @@ class _AnnotationPainter extends CustomPainter {
   final double scale;
   final Offset offset;
 
-  ui.Image? _image;
+
 
   _AnnotationPainter({
-    required this.imageBytes,
+    required this.image,
     required this.items,
     required this.currentPoints,
     required this.currentTool,
@@ -338,18 +355,16 @@ class _AnnotationPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // 绘制背景图
-    if (_image != null) {
+    if (image != null) {
       canvas.save();
       canvas.translate(offset.dx, offset.dy);
       canvas.scale(scale);
 
-      final src = Rect.fromLTWH(0, 0, _image!.width.toDouble(), _image!.height.toDouble());
+      final src = Rect.fromLTWH(0, 0, image!.width.toDouble(), image!.height.toDouble());
       final dst = Rect.fromLTWH(0, 0, size.width, size.height);
-      canvas.drawImageRect(_image!, src, dst, Paint());
+      canvas.drawImageRect(image!, src, dst, Paint());
       canvas.restore();
     } else {
-      // 异步加载图片
-      _loadImage(size);
       canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
           Paint()..color = Colors.grey[800]!);
     }
@@ -363,12 +378,6 @@ class _AnnotationPainter extends CustomPainter {
     if (currentPoints.isNotEmpty) {
       _drawCurrent(canvas, size);
     }
-  }
-
-  void _loadImage(Size size) async {
-    final codec = await ui.instantiateImageCodec(imageBytes);
-    final frame = await codec.getNextFrame();
-    _image = frame.image;
   }
 
   void _drawItem(Canvas canvas, Size size, AnnotationItem item) {
@@ -494,5 +503,12 @@ class _AnnotationPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _AnnotationPainter oldDelegate) {
+    return oldDelegate.items.length != items.length ||
+        oldDelegate.currentPoints.length != currentPoints.length ||
+        oldDelegate.scale != scale ||
+        oldDelegate.offset != offset ||
+        oldDelegate.currentTool != currentTool ||
+        oldDelegate.image != image;
+  }
 }

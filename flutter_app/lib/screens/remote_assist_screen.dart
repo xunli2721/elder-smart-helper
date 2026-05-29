@@ -191,7 +191,6 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
             Navigator.pop(context);
           },
         ),
-      ),
     );
   }
 
@@ -319,9 +318,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
 
   Widget _buildChatScreen() {
     final s = context.read<FontSizeProvider>().scaled;
-    return Screenshot(
-      controller: _screenshotController,
-      child: Scaffold(
+    return Scaffold(
         appBar: AppBar(
           title: const Text('远程协助中'),
           actions: [
@@ -353,13 +350,16 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           children: [
             // 消息列表
             Expanded(
-              child: _messages.isEmpty
+              child: Screenshot(
+                controller: _screenshotController,
+                child: _messages.isEmpty
                   ? Center(child: Text('等待家人响应...\n可以发送消息或截图沟通', style: TextStyle(fontSize: s(18), color: Colors.grey), textAlign: TextAlign.center))
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _messages.length,
                       itemBuilder: (context, index) => _buildMessageBubble(_messages[index]),
                     ),
+              ),
             ),
             // 输入框 + 截图按钮
             Container(

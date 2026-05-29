@@ -8,6 +8,7 @@ class TtsService {
   final FlutterTts _tts = FlutterTts();
   bool _isInitialized = false;
   bool _isSpeaking = false;
+  void Function()? onComplete;
 
   bool get isSpeaking => _isSpeaking;
 
@@ -22,6 +23,7 @@ class TtsService {
 
     _tts.setCompletionHandler(() {
       _isSpeaking = false;
+      onComplete?.call();
     });
     _tts.setErrorHandler((msg) {
       _isSpeaking = false;

@@ -51,6 +51,14 @@ class FontSizeProvider extends ChangeNotifier {
     }
   }
 
+  /// 从服务端同步值到本地（不回写 API）
+  Future<void> setFromServer(String key) async {
+    _fontSizeKey = key;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('font_size', key);
+    notifyListeners();
+  }
+
   /// 更新字体大小：保存到服务端 + 本地缓存 + 通知 UI 刷新
   Future<bool> update(String key) async {
     try {

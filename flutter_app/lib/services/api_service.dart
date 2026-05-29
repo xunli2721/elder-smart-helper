@@ -117,9 +117,9 @@ class ApiService {
   static Future<Map<String, dynamic>> updateSessionStatus(int sessionId, String status) async {
     return _request('PUT', '/remote/sessions/$sessionId/status', body: {'status': status});
   }
-}
 
   // Online Status
   static Future<Map<String, dynamic>> getOnlineStatus(List<int> userIds) async {
     return _request('POST', '/users/online-status', body: {'userIds': userIds});
-  }
+  }  
+}

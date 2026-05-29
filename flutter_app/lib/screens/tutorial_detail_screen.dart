@@ -39,14 +39,15 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
     } else {
       final step = widget.tutorial.steps[_currentStep];
       final text = '${step.title}。${step.description}';
+      // 同步当前语速
+      final rate = context.read<FontSizeProvider>().speechRate;
+      await _tts.setRateByLevel(rate);
+      // 设置完成回调
+      _tts.onComplete = () {
+        if (mounted) setState(() => _isSpeaking = false);
+      };
       setState(() => _isSpeaking = true);
       await _tts.speak(text);
-      // 朗读完成后更新状态
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && !_tts.isSpeaking) {
-          setState(() => _isSpeaking = false);
-        }
-      });
     }
   }
 
