@@ -1,11 +1,13 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class FontSizeProvider extends ChangeNotifier {
   String _fontSizeKey = 'large';
+  String _speechRate = 'slow';
 
   String get fontSizeKey => _fontSizeKey;
+  String get speechRate => _speechRate;
 
   double get scaleFactor {
     switch (_fontSizeKey) {
@@ -29,6 +31,7 @@ class FontSizeProvider extends ChangeNotifier {
   Future<void> loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     _fontSizeKey = prefs.getString('font_size') ?? 'large';
+    _speechRate = prefs.getString('speech_rate') ?? 'slow';
     notifyListeners();
   }
 
@@ -63,5 +66,13 @@ class FontSizeProvider extends ChangeNotifier {
     } catch (_) {
       return false;
     }
+  }
+
+  /// 更新播报语速：仅保存本地缓存
+  Future<void> updateSpeechRate(String rate) async {
+    _speechRate = rate;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('speech_rate', rate);
+    notifyListeners();
   }
 }

@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
+import '../services/tts_service.dart';
 import '../models/tutorial.dart';
 
 class TutorialDetailScreen extends StatefulWidget {
@@ -13,6 +14,56 @@ class TutorialDetailScreen extends StatefulWidget {
 
 class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
   int _currentStep = 0;
+  bool _isSpeaking = false;
+  final TtsService _tts = TtsService();
+
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+  }
+
+  Future<void> _initTts() async {
+    await _tts.init();
+    // 读取用户的语速偏好
+    if (mounted) {
+      final rate = context.read<FontSizeProvider>().speechRate;
+      await _tts.setRateByLevel(rate);
+    }
+  }
+
+  Future<void> _toggleSpeak() async {
+    if (_isSpeaking) {
+      await _tts.stop();
+      setState(() => _isSpeaking = false);
+    } else {
+      final step = widget.tutorial.steps[_currentStep];
+      final text = '${step.title}。${step.description}';
+      setState(() => _isSpeaking = true);
+      await _tts.speak(text);
+      // 朗读完成后更新状态
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_tts.isSpeaking) {
+          setState(() => _isSpeaking = false);
+        }
+      });
+    }
+  }
+
+  void _goToStep(int step) {
+    // 切换步骤时停止朗读
+    _tts.stop();
+    setState(() {
+      _currentStep = step;
+      _isSpeaking = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,11 +111,34 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
             ),
             const SizedBox(height: 24),
 
-            // 步骤标题
-            Text(
-              step.title,
-              style: TextStyle(fontSize: s(26), fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
+            // 步骤标题 + 朗读按钮
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    step.title,
+                    style: TextStyle(fontSize: s(26), fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _toggleSpeak,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _isSpeaking ? Colors.orange : const Color(0xFF4A90E2).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      _isSpeaking ? Icons.stop_circle : Icons.volume_up,
+                      size: 28,
+                      color: _isSpeaking ? Colors.white : const Color(0xFF4A90E2),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
 
@@ -100,7 +174,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
                 if (_currentStep > 0)
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => setState(() => _currentStep--),
+                      onPressed: () => _goToStep(_currentStep - 1),
                       icon: const Icon(Icons.arrow_back, size: 24),
                       label: Text('上一步', style: TextStyle(fontSize: s(20))),
                       style: OutlinedButton.styleFrom(
@@ -115,7 +189,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       if (_currentStep < steps.length - 1) {
-                        setState(() => _currentStep++);
+                        _goToStep(_currentStep + 1);
                       } else {
                         _showCompleteDialog();
                       }
@@ -134,6 +208,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
 
   void _showCompleteDialog() {
     final s = context.read<FontSizeProvider>().scaled;
+    _tts.stop();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

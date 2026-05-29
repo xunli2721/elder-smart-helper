@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
 import '../services/api_service.dart';
@@ -16,6 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _phone = '';
   String _userType = '';
   String _fontSize = 'large';
+  String _speechRate = 'slow';
   bool _loading = true;
   final _nameController = TextEditingController();
   final _phoneBindController = TextEditingController();
@@ -29,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadProfile() async {
     try {
       final result = await ApiService.getProfile();
+      final provider = context.read<FontSizeProvider>();
       if (result['success'] == true) {
         final user = result['data'];
         setState(() {
@@ -36,6 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _phone = user['phone'];
           _userType = user['user_type'];
           _fontSize = user['font_size'] ?? 'large';
+          _speechRate = provider.speechRate;
           _nameController.text = _name;
           _loading = false;
         });
@@ -55,6 +58,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('更新失败')));
     }
+  }
+
+  Future<void> _updateSpeechRate(String rate) async {
+    final provider = context.read<FontSizeProvider>();
+    await provider.updateSpeechRate(rate);
+    setState(() => _speechRate = rate);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('播报语速已更新')));
   }
 
   Future<void> _updateName() async {
@@ -154,10 +165,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Expanded(
                         child: TextField(
                           controller: _nameController,
-                          style: TextStyle(fontSize: s(20)),
-                          decoration: const InputDecoration(
+                          style: TextStyle(fontSize: s(18)),
+                          decoration: InputDecoration(
                             hintText: '输入新姓名',
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
                       ),
@@ -191,6 +203,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _fontSizeOption('medium', '中', 16),
                       _fontSizeOption('large', '大', 18),
                       _fontSizeOption('xlarge', '超大', 20),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 播报语速设置
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('播报语速', style: TextStyle(fontSize: s(20), fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('教程朗读时的语音速度', style: TextStyle(fontSize: s(14), color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _speechRateOption('slow', '慢速'),
+                      _speechRateOption('medium', '中速'),
+                      _speechRateOption('fast', '快速'),
                     ],
                   ),
                 ],
@@ -264,6 +301,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _speechRateOption(String rate, String label) {
+    final s = context.read<FontSizeProvider>().scaled;
+    final isSelected = _speechRate == rate;
+    IconData icon;
+    switch (rate) {
+      case 'slow':
+        icon = Icons.slow_motion_video;
+        break;
+      case 'medium':
+        icon = Icons.speed;
+        break;
+      case 'fast':
+        icon = Icons.fast_forward;
+        break;
+      default:
+        icon = Icons.speed;
+    }
+    return GestureDetector(
+      onTap: () => _updateSpeechRate(rate),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFF4A90E2) : Colors.grey[200],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Icon(icon, size: 28, color: isSelected ? Colors.white : Colors.black87),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(
+            fontSize: s(16),
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? const Color(0xFF4A90E2) : Colors.black87,
+          )),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBindFamilyCard() {
     final s = context.read<FontSizeProvider>().scaled;
     return Card(
@@ -281,9 +361,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     controller: _phoneBindController,
                     keyboardType: TextInputType.phone,
                     style: TextStyle(fontSize: s(18)),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: '输入家人手机号',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ),
