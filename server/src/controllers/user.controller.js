@@ -123,3 +123,20 @@ exports.updateSettings = async (req, res) => {
     res.status(500).json({ success: false, message: '更新失败' });
   }
 };
+
+// 查询用户在线状态
+exports.getOnlineStatus = async (req, res) => {
+  try {
+    const { userIds } = req.body;
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ success: false, message: '请提供用户 ID 列表' });
+    }
+
+    const socketService = require('../services/socketService');
+    const statusMap = socketService.getOnlineStatus(userIds);
+    res.json({ success: true, data: statusMap });
+  } catch (err) {
+    console.error('GetOnlineStatus error:', err);
+    res.status(500).json({ success: false, message: '查询在线状态失败' });
+  }
+};

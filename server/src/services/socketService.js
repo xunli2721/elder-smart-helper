@@ -1,4 +1,4 @@
-const { Server } = require('socket.io');
+﻿const { Server } = require('socket.io');
 
 let io;
 
@@ -18,7 +18,7 @@ function initialize(server) {
 
     // 用户上线
     socket.on('user_online', (userId) => {
-      onlineUsers.set(userId, socket.id);
+      onlineUsers.set(String(userId), socket.id);
       console.log(`User ${userId} online`);
     });
 
@@ -67,4 +67,18 @@ function getIO() {
   return io;
 }
 
-module.exports = { initialize, getIO };
+/// 检查单个用户是否在线
+function isOnline(userId) {
+  return onlineUsers.has(String(userId));
+}
+
+/// 批量查询用户在线状态，返回 { userId: true/false }
+function getOnlineStatus(userIds) {
+  const result = {};
+  for (const id of userIds) {
+    result[String(id)] = onlineUsers.has(String(id));
+  }
+  return result;
+}
+
+module.exports = { initialize, getIO, isOnline, getOnlineStatus };
