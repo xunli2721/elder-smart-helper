@@ -30,7 +30,7 @@ class AnnotationCanvas extends StatefulWidget {
 
   const AnnotationCanvas({
     super.key,
-    required this.image,
+    required this.imageBytes,
     required this.onComplete,
   });
 
@@ -223,7 +223,7 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
                     _offset = _prevOffset + (details.focalPoint - details.localFocalPoint);
                   });
                 } else {
-                  _onPanUpdate(DragUpdateDetails(localPosition: details.localFocalPoint));
+                  _onPanUpdate(DragUpdateDetails(localPosition: details.localFocalPoint, globalPosition: details.focalPoint));
                 }
               },
               onScaleEnd: (details) {

@@ -2,6 +2,8 @@
 const cors = require('cors');
 const dotenv = require('dotenv');
 const http = require('http');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
 
 dotenv.config();
 
@@ -21,6 +23,7 @@ const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const tutorialRoutes = require('./routes/tutorial.routes');
 const remoteRoutes = require('./routes/remote.routes');
+const securityRoutes = require('./routes/security.routes');
 const { verifyToken } = require('./middleware/auth');
 const socketService = require('./services/socketService');
 
@@ -29,16 +32,27 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
 // CORS 配置：从环境变量读取允许的来源
-const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8080'];
+let corsOptions;
+if (process.env.CORS_ORIGIN === '*') {
+  corsOptions = {
+    origin: true, // 允许所有来源
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  };
+} else {
+  const corsOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+    : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8080'];
+  corsOptions = {
+    origin: corsOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  };
+}
 
-app.use(cors({
-  origin: corsOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -82,6 +96,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// Swagger API 文档
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'ElderSmartHelper API 文档',
+}));
+
 // 认证接口加限流（每 15 分钟最多 20 次）
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), authRoutes);
 
@@ -89,6 +109,7 @@ app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), authRoute
 app.use('/api/users', verifyToken, userRoutes);
 app.use('/api/tutorials', tutorialRoutes);
 app.use('/api/remote', verifyToken, remoteRoutes);
+app.use('/api/security', verifyToken, securityRoutes);
 
 // 全局错误处理中间件
 app.use((err, req, res, next) => {
@@ -101,7 +122,8 @@ if (require.main === module) {
   socketService.initialize(server);
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`CORS allowed origins: ${corsOrigins.join(', ')}`);
+    const origins = corsOptions.origin === true ? '*' : (Array.isArray(corsOptions.origin) ? corsOptions.origin.join(', ') : corsOptions.origin);
+    console.log(`CORS allowed origins: ${origins}`);
   });
 }
 

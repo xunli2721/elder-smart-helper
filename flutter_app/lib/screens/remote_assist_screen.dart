@@ -191,6 +191,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
             Navigator.pop(context);
           },
         ),
+      ),
     );
   }
 
@@ -410,7 +411,6 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 

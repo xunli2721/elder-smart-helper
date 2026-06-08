@@ -98,7 +98,9 @@ describe('Remote API Integration', () => {
 
   describe('PUT /api/remote/sessions/:id/status', () => {
     test('should update session status to active', async () => {
-      db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+      db.query
+        .mockResolvedValueOnce([{ affectedRows: 1 }])  // update
+        .mockResolvedValueOnce([[{ elderly_user_id: 1, assistant_user_id: 2 }]]);  // get session for notification
 
       const res = await request(app)
         .put('/api/remote/sessions/1/status')
@@ -110,7 +112,9 @@ describe('Remote API Integration', () => {
     });
 
     test('should update session status to completed', async () => {
-      db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+      db.query
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([[{ elderly_user_id: 1, assistant_user_id: 2 }]]);
 
       const res = await request(app)
         .put('/api/remote/sessions/1/status')

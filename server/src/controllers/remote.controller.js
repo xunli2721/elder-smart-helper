@@ -1,4 +1,5 @@
 ﻿const db = require('../config/db');
+const notificationService = require('../services/notificationService');
 
 // 发起协助请求
 exports.requestSession = async (req, res) => {
@@ -20,6 +21,13 @@ exports.requestSession = async (req, res) => {
     const [result] = await db.query(
       'INSERT INTO remote_sessions (elderly_user_id, assistant_user_id, status, request_description) VALUES (?, ?, ?, ?)',
       [req.user.id, assistant_user_id, 'requested', request_description || '']
+    );
+
+    // 发送通知给协助者
+    await notificationService.sendSessionRequestNotification(
+      assistant_user_id,
+      req.user.name || '用户',
+      result.insertId
     );
 
     res.json({ success: true, data: { session_id: result.insertId } });
@@ -112,6 +120,20 @@ exports.updateStatus = async (req, res) => {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: '会话不存在' });
+    }
+
+    // 通知对方会话状态变更
+    const [session] = await db.query(
+      'SELECT elderly_user_id, assistant_user_id FROM remote_sessions WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (session.length > 0) {
+      const notifyUserId = session[0].elderly_user_id === req.user.id
+        ? session[0].assistant_user_id
+        : session[0].elderly_user_id;
+
+      await notificationService.sendSessionStatusNotification(notifyUserId, status, req.params.id);
     }
 
     res.json({ success: true, message: '状态更新成功' });

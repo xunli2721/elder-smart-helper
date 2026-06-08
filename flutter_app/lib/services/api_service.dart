@@ -4,7 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // TODO: 修改为你的后端地址
-  static const String baseUrl = 'http://10.0.2.2:3001/api';
+  // Android 模拟器用 10.0.2.2，Windows/Web/桌面用 localhost
+  static const String baseUrl = 'http://localhost:3001/api';
   static String? _token;
 
   static Future<void> setToken(String token) async {

@@ -136,7 +136,9 @@ describe('Remote Controller', () => {
     test('should update status to active', async () => {
       req.params.id = '1';
       req.body = { status: 'active' };
-      db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+      db.query
+        .mockResolvedValueOnce([{ affectedRows: 1 }])  // update
+        .mockResolvedValueOnce([[{ elderly_user_id: 1, assistant_user_id: 2 }]]);  // get session for notification
 
       await remoteController.updateStatus(req, res);
 
@@ -148,7 +150,9 @@ describe('Remote Controller', () => {
     test('should update status to completed', async () => {
       req.params.id = '1';
       req.body = { status: 'completed' };
-      db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+      db.query
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([[{ elderly_user_id: 1, assistant_user_id: 2 }]]);
 
       await remoteController.updateStatus(req, res);
 
@@ -160,7 +164,9 @@ describe('Remote Controller', () => {
     test('should update status to cancelled', async () => {
       req.params.id = '1';
       req.body = { status: 'cancelled' };
-      db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+      db.query
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([[{ elderly_user_id: 1, assistant_user_id: 2 }]]);
 
       await remoteController.updateStatus(req, res);
 

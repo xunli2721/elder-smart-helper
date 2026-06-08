@@ -47,8 +47,8 @@ class AppTheme {
         labelStyle: TextStyle(fontSize: 18 * scaleFactor),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        selectedFontSize: 14 * scaleFactor,
-        unselectedFontSize: 12 * scaleFactor,
+        selectedLabelStyle: TextStyle(fontSize: 14 * scaleFactor),
+        unselectedLabelStyle: TextStyle(fontSize: 12 * scaleFactor),
       ),
     );
   }
