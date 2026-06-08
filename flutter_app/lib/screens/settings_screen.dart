@@ -34,10 +34,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (result['success'] == true) {
         final user = result['data'];
         setState(() {
-          _name = user['name'];
-          _phone = user['phone'];
-          _userType = user['user_type'];
-          _fontSize = user['font_size'] ?? 'large';
+          _name = user['name']?.toString() ?? '';
+          _phone = user['phone']?.toString() ?? '';
+          _userType = user['user_type']?.toString() ?? '';
+          _fontSize = user['font_size']?.toString() ?? 'large';
           _speechRate = provider.speechRate;
           _nameController.text = _name;
           _loading = false;
@@ -376,7 +376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     final result = await ApiService.bindFamily(phone, 'child');
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(result['success'] == true ? '绑定成功' : (result['message'] ?? '绑定失败'))),
+                      SnackBar(content: Text(result['success'] == true ? '绑定成功' : (result['message']?.toString() ?? '绑定失败'))),
                     );
                     _phoneBindController.clear();
                   },

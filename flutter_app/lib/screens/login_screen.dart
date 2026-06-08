@@ -28,10 +28,13 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
     try {
       final result = await ApiService.login(phone, password);
-      if (result['success'] == true) {
-        await ApiService.setToken(result['data']['token']);
+      if (result['success'] == true && result['data'] != null) {
+        final token = result['data']['token']?.toString();
+        if (token != null) {
+          await ApiService.setToken(token);
+        }
         // 同步字体设置到 Provider
-        final serverFontSize = result['data']['user']?['font_size'] ?? 'large';
+        final serverFontSize = result['data']['user']?['font_size']?.toString() ?? 'large';
         if (mounted) {
           await context.read<FontSizeProvider>().setFromServer(serverFontSize);
         }
@@ -39,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainScreen()));
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'] ?? '登录失败')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']?.toString() ?? '登录失败')));
       }
     } catch (e) {
       if (!mounted) return;
@@ -61,51 +64,53 @@ class _LoginScreenState extends State<LoginScreen> {
     final s = context.read<FontSizeProvider>().scaled;
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.phone_android, size: 80, color: Color(0xFF4A90E2)),
-              const SizedBox(height: 16),
-              Text('智能助手', style: TextStyle(fontSize: s(32), fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('中老年人智能手机助手', style: TextStyle(fontSize: s(18), color: Colors.grey)),
-              const SizedBox(height: 48),
-              TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                style: TextStyle(fontSize: s(20)),
-                decoration: const InputDecoration(
-                  labelText: '手机号',
-                  prefixIcon: Icon(Icons.phone),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.phone_android, size: 80, color: Color(0xFF4A90E2)),
+                const SizedBox(height: 16),
+                Text('智能助手', style: TextStyle(fontSize: s(32), fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text('中老年人智能手机助手', style: TextStyle(fontSize: s(18), color: Colors.grey)),
+                const SizedBox(height: 48),
+                TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  style: TextStyle(fontSize: s(20)),
+                  decoration: const InputDecoration(
+                    labelText: '手机号',
+                    prefixIcon: Icon(Icons.phone),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                style: TextStyle(fontSize: s(20)),
-                decoration: const InputDecoration(
-                  labelText: '密码',
-                  prefixIcon: Icon(Icons.lock),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  style: TextStyle(fontSize: s(20)),
+                  decoration: const InputDecoration(
+                    labelText: '密码',
+                    prefixIcon: Icon(Icons.lock),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _loading ? null : _login,
-                child: _loading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('登录'),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen()));
-                },
-                child: Text('没有账号？立即注册', style: TextStyle(fontSize: s(18))),
-              ),
-            ],
+                const SizedBox(height: 32),
+                ElevatedButton(
+                  onPressed: _loading ? null : _login,
+                  child: _loading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('登录'),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen()));
+                  },
+                  child: Text('没有账号？立即注册', style: TextStyle(fontSize: s(18))),
+                ),
+              ],
+            ),
           ),
         ),
       ),

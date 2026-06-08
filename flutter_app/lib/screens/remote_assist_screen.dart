@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:screenshot/screenshot.dart';
 import '../providers/font_size_provider.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
@@ -16,7 +14,6 @@ class RemoteAssistScreen extends StatefulWidget {
 }
 
 class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
-  final ScreenshotController _screenshotController = ScreenshotController();
   List<dynamic> _family = [];
   List<dynamic> _sessions = [];
   Map<String, bool> _onlineStatus = {};
@@ -36,27 +33,44 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     try {
       final familyResult = await ApiService.getFamily();
       final sessionResult = await ApiService.getRemoteSessions();
-      final familyList = familyResult['success'] == true ? familyResult['data'] : [];
+      final familyList = (familyResult['success'] == true && familyResult['data'] != null)
+          ? familyResult['data'] as List
+          : <dynamic>[];
 
       // 查询家人在线状态
       Map<String, bool> onlineStatus = {};
       if (familyList.isNotEmpty) {
-        final ids = (familyList as List).map((f) => f['id'] as int).toList();
-        try {
-          final statusResult = await ApiService.getOnlineStatus(ids);
-          if (statusResult['success'] == true) {
-            onlineStatus = Map<String, bool>.from(statusResult['data']);
-          }
-        } catch (_) {}
+        final ids = familyList
+            .map((f) => f['id'])
+            .where((id) => id != null)
+            .map((id) => id is int ? id : int.tryParse(id.toString()) ?? 0)
+            .toList();
+        if (ids.isNotEmpty) {
+          try {
+            final statusResult = await ApiService.getOnlineStatus(ids);
+            if (statusResult['success'] == true && statusResult['data'] != null) {
+              final data = statusResult['data'];
+              if (data is Map) {
+                onlineStatus = Map.fromEntries(
+                  data.entries.map((e) => MapEntry(e.key.toString(), e.value == true)),
+                );
+              }
+            }
+          } catch (_) {}
+        }
       }
 
+      if (!mounted) return;
       setState(() {
         _family = familyList;
-        _sessions = sessionResult['success'] == true ? sessionResult['data'] : [];
+        _sessions = (sessionResult['success'] == true && sessionResult['data'] != null)
+            ? sessionResult['data'] as List
+            : <dynamic>[];
         _onlineStatus = onlineStatus;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
@@ -64,13 +78,20 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   Future<void> _requestAssist(int familyId, String familyName) async {
     try {
       final result = await ApiService.requestRemote(familyId, '请求远程协助');
-      if (result['success'] == true) {
+      if (result['success'] == true && result['data'] != null) {
         final sessionId = result['data']['session_id'];
-        setState(() => _activeSessionId = sessionId);
+        if (sessionId == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('创建会话失败')));
+          return;
+        }
+        setState(() => _activeSessionId = sessionId is int ? sessionId : int.tryParse(sessionId.toString()));
 
         await SocketService.connect();
-        SocketService.joinSession(sessionId);
-        _registerSocketListeners();
+        if (_activeSessionId != null) {
+          SocketService.joinSession(_activeSessionId!);
+          _registerSocketListeners();
+        }
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已向 $familyName 发起协助请求')));
@@ -145,25 +166,10 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   /// 截屏并发送
   Future<void> _takeScreenshot() async {
     if (_activeSessionId == null) return;
-    try {
-      final imageBytes = await _screenshotController.capture();
-      if (imageBytes == null) return;
-
-      final base64Image = base64Encode(imageBytes);
-      SocketService.sendScreenshot(_activeSessionId!, base64Image);
-
-      setState(() {
-        _messages.add({
-          'type': 'screenshot',
-          'imageBase64': base64Image,
-          'isMe': true,
-          'sender': '我',
-        });
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('截图失败: $e')));
-    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('截图功能暂不可用')),
+    );
   }
 
   /// 打开标注页面
@@ -258,37 +264,55 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
             )
           else
             ..._family.map((f) {
-              final isOnline = _onlineStatus[f['id'].toString()] == true;
+              final isOnline = _onlineStatus[f['id']?.toString()] == true;
+              final name = f['name']?.toString() ?? '未知';
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: Stack(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
                     children: [
-                      const CircleAvatar(radius: 24, child: Icon(Icons.person, size: 28)),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 14,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: isOnline ? Colors.green : Colors.grey,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                      Stack(
+                        children: [
+                          const CircleAvatar(radius: 24, child: Icon(Icons.person, size: 28)),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: isOnline ? Colors.green : Colors.grey,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                            ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: TextStyle(fontSize: s(20), fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_relationshipText(f['relationship']?.toString())} · ${isOnline ? "在线" : "离线"}',
+                              style: TextStyle(fontSize: s(16), color: isOnline ? Colors.green : Colors.grey),
+                            ),
+                          ],
                         ),
                       ),
+                      if (f['id'] != null)
+                        SizedBox(
+                          width: 72,
+                          child: ElevatedButton(
+                            onPressed: () => _requestAssist(f['id'] as int, name),
+                            child: const Text('求助'),
+                          ),
+                        ),
                     ],
-                  ),
-                  title: Text(f['name'], style: TextStyle(fontSize: s(20), fontWeight: FontWeight.bold)),
-                  subtitle: Text(
-                    '${_relationshipText(f['relationship'])} · ${isOnline ? "在线" : "离线"}',
-                    style: TextStyle(fontSize: s(16), color: isOnline ? Colors.green : Colors.grey),
-                  ),
-                  trailing: ElevatedButton(
-                    onPressed: () => _requestAssist(f['id'], f['name']),
-                    child: const Text('求助'),
                   ),
                 ),
               );
@@ -299,19 +323,36 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           if (_sessions.isEmpty)
             Center(child: Text('暂无协助记录', style: TextStyle(fontSize: s(18), color: Colors.grey)))
           else
-            ..._sessions.map((s2) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(16),
-                leading: Icon(_statusIcon(s2['status']), size: 32, color: _statusColor(s2['status'])),
-                title: Text(s2['elderly_name'] ?? s2['assistant_name'] ?? '未知', style: TextStyle(fontSize: s(18))),
-                subtitle: Text(_statusText(s2['status']), style: TextStyle(fontSize: s(16))),
-                trailing: Text(
-                  s2['created_at']?.toString().substring(0, 16) ?? '',
-                  style: TextStyle(fontSize: s(14), color: Colors.grey),
+            ..._sessions.map((s2) {
+              final createdAt = s2['created_at']?.toString() ?? '';
+              final displayTime = createdAt.length >= 16 ? createdAt.substring(0, 16) : createdAt;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(_statusIcon(s2['status']?.toString()), size: 32, color: _statusColor(s2['status']?.toString())),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(s2['elderly_name']?.toString() ?? s2['assistant_name']?.toString() ?? '未知', style: TextStyle(fontSize: s(18))),
+                            const SizedBox(height: 4),
+                            Text(_statusText(s2['status']?.toString()), style: TextStyle(fontSize: s(16))),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        displayTime,
+                        style: TextStyle(fontSize: s(14), color: Colors.grey),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            )),
+              );
+            }),
         ],
       ),
     );
@@ -351,23 +392,20 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           children: [
             // 消息列表
             Expanded(
-              child: Screenshot(
-                controller: _screenshotController,
-                child: _messages.isEmpty
+              child: _messages.isEmpty
                   ? Center(child: Text('等待家人响应...\n可以发送消息或截图沟通', style: TextStyle(fontSize: s(18), color: Colors.grey), textAlign: TextAlign.center))
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _messages.length,
                       itemBuilder: (context, index) => _buildMessageBubble(_messages[index]),
                     ),
-              ),
             ),
             // 输入框 + 截图按钮
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -2))],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -2))],
               ),
               child: Row(
                 children: [
@@ -377,7 +415,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4A90E2).withOpacity(0.1),
+                        color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Icon(Icons.camera_alt, color: Color(0xFF4A90E2), size: 24),

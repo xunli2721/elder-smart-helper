@@ -1,11 +1,14 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // TODO: 修改为你的后端地址
-  // Android 模拟器用 10.0.2.2，Windows/Web/桌面用 localhost
-  static const String baseUrl = 'http://localhost:3001/api';
+  // Android 模拟器用 10.0.2.2，其他平台用 localhost
+  static String get baseUrl {
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001/api';
+    return 'http://localhost:3001/api';
+  }
   static String? _token;
 
   static Future<void> setToken(String token) async {

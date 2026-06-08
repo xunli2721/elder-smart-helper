@@ -59,31 +59,71 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    HomeScreen(),
-    TutorialListScreen(),
-    RemoteAssistScreen(),
-    SettingsScreen(),
+  final List<Widget> _pages = [
+    const HomeScreen(),
+    const TutorialListScreen(),
+    const RemoteAssistScreen(),
+    const SettingsScreen(),
+  ];
+
+  static const _navItems = [
+    (icon: Icons.home, label: '首页'),
+    (icon: Icons.menu_book, label: '教程'),
+    (icon: Icons.support_agent, label: '远程协助'),
+    (icon: Icons.settings, label: '设置'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final scale = context.watch<FontSizeProvider>().scaleFactor;
+    final theme = Theme.of(context);
     return Scaffold(
-      body: _pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedFontSize: 14 * scale,
-        unselectedFontSize: 12 * scale,
-        iconSize: 28,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: '首页'),
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: '教程'),
-          BottomNavigationBarItem(icon: Icon(Icons.support_agent), label: '远程协助'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: '设置'),
-        ],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: Colors.grey.shade300)),
+        ),
+        child: SafeArea(
+          child: SizedBox(
+            height: 60,
+            child: Row(
+              children: List.generate(_navItems.length, (index) {
+                final item = _navItems[index];
+                final isSelected = _currentIndex == index;
+                return Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _currentIndex = index),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          item.icon,
+                          size: 28,
+                          color: isSelected
+                              ? theme.primaryColor
+                              : Colors.grey,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          item.label,
+                          style: TextStyle(
+                            fontSize: (isSelected ? 14 : 12) * scale,
+                            color: isSelected
+                                ? theme.primaryColor
+                                : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
       ),
     );
   }

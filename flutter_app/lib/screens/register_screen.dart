@@ -30,8 +30,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _loading = true);
     try {
       final result = await ApiService.register(phone, password, name, _userType);
-      if (result['success'] == true) {
-        await ApiService.setToken(result['data']['token']);
+      if (result['success'] == true && result['data'] != null) {
+        final token = result['data']['token']?.toString();
+        if (token != null) {
+          await ApiService.setToken(token);
+        }
         if (!mounted) return;
         Navigator.pushAndRemoveUntil(
           context,
@@ -40,7 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'] ?? '注册失败')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']?.toString() ?? '注册失败')));
       }
     } catch (e) {
       if (!mounted) return;

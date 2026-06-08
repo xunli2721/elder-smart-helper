@@ -16,13 +16,16 @@ class Tutorial {
   });
 
   factory Tutorial.fromJson(Map<String, dynamic> json) {
+    final stepsList = json['steps'];
     return Tutorial(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'] ?? '',
-      category: json['category'],
-      difficultyLevel: json['difficulty_level'] ?? 'beginner',
-      steps: (json['steps'] as List).map((s) => TutorialStep.fromJson(s)).toList(),
+      id: json['id'] ?? 0,
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      category: json['category']?.toString() ?? '',
+      difficultyLevel: json['difficulty_level']?.toString() ?? 'beginner',
+      steps: stepsList is List
+          ? stepsList.map((s) => TutorialStep.fromJson(s)).toList()
+          : <TutorialStep>[],
     );
   }
 }
@@ -40,9 +43,9 @@ class TutorialStep {
 
   factory TutorialStep.fromJson(Map<String, dynamic> json) {
     return TutorialStep(
-      step: json['step'],
-      title: json['title'],
-      description: json['description'],
+      step: json['step'] ?? 0,
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
     );
   }
 }

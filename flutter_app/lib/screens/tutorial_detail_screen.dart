@@ -129,7 +129,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _isSpeaking ? Colors.orange : const Color(0xFF4A90E2).withOpacity(0.1),
+                      color: _isSpeaking ? Colors.orange : const Color(0xFF4A90E2).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Icon(
@@ -151,7 +151,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,

@@ -6,7 +6,7 @@ class SocketService {
   static Future<void> connect() async {
     if (_socket != null && _socket!.connected) return;
 
-    _socket = io.io('http://10.0.2.2:3001', <String, dynamic>{
+    _socket = io.io('http://localhost:3001', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });

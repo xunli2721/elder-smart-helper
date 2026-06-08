@@ -39,8 +39,8 @@ class FontSizeProvider extends ChangeNotifier {
   Future<void> loadFromApi() async {
     try {
       final result = await ApiService.getProfile();
-      if (result['success'] == true) {
-        final key = result['data']['font_size'] ?? 'large';
+      if (result['success'] == true && result['data'] != null) {
+        final key = result['data']['font_size']?.toString() ?? 'large';
         _fontSizeKey = key;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('font_size', key);

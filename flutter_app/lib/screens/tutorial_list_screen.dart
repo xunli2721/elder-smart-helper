@@ -36,11 +36,13 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
     setState(() => _loading = true);
     try {
       final result = await ApiService.getTutorials(category: _selectedCategory);
-      if (result['success'] == true) {
+      if (result['success'] == true && result['data'] != null) {
         setState(() {
           _tutorials = (result['data'] as List).map((t) => Tutorial.fromJson(t)).toList();
           _loading = false;
         });
+      } else {
+        setState(() => _loading = false);
       }
     } catch (e) {
       setState(() => _loading = false);
@@ -119,7 +121,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF4A90E2).withOpacity(0.1),
+            color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.menu_book, size: 32, color: Color(0xFF4A90E2)),
@@ -129,7 +131,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
             Expanded(child: Text(tutorial.title, style: TextStyle(fontSize: s(20), fontWeight: FontWeight.bold))),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: difficultyColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: difficultyColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
               child: Text(difficultyText, style: TextStyle(fontSize: s(14), color: difficultyColor, fontWeight: FontWeight.bold)),
             ),
           ],

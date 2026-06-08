@@ -1,6 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../providers/font_size_provider.dart';
 import '../services/api_service.dart';
 import '../models/tutorial.dart';
@@ -26,74 +29,45 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadTutorials() async {
     try {
       final result = await ApiService.getTutorials();
-      if (result['success'] == true) {
+      if (result['success'] == true && result['data'] != null) {
         setState(() {
           _tutorials = (result['data'] as List).map((t) => Tutorial.fromJson(t)).toList();
           _loading = false;
         });
+      } else {
+        setState(() => _loading = false);
       }
     } catch (e) {
       setState(() => _loading = false);
     }
   }
 
-  /// 通过 Android Intent 打开系统应用
-  Future<void> _launchIntent(String action, {String? data}) async {
-    final uri = data != null
-        ? Uri.parse('intent:#Intent;action=$action;S.android.intent.extra.TEXT=$data;end')
-        : Uri.parse('intent:#Intent;action=$action;end');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法打开该功能，请检查是否安装了对应应用')),
-      );
-    }
-  }
-
   /// 快捷功能点击处理
   Future<void> _onQuickAccessTap(String label) async {
-    Uri? uri;
-    switch (label) {
-      case '健康码':
-        // 尝试打开微信健康码小程序（需用户已安装微信）
-        uri = Uri.parse('weixin://dl/business/?t=healthcode');
-        break;
-      case '扫码':
-        // 打开系统相机扫码（Android Intent）
-        uri = Uri.parse('intent:#Intent;action=com.google.zxing.client.android.SCAN;end');
-        break;
-      case '乘车':
-        // 打开支付宝乘车码
-        uri = Uri.parse('alipays://platformapi/startapp?appId=20000134');
-        break;
-      case '缴费':
-        // 打开支付宝生活缴费
-        uri = Uri.parse('alipays://platformapi/startapp?appId=20000178');
-        break;
-      case '视频通话':
-        // 打开微信
-        uri = Uri.parse('weixin://');
-        break;
-      case '通讯录':
-        // 打开系统通讯录
-        uri = Uri.parse('content://contacts/people');
-        break;
-      case '拍照':
-        // 打开系统相机
-        uri = Uri.parse('intent:#Intent;action=android.media.action.STILL_IMAGE_CAMERA;end');
-        break;
-      case '地图':
-        // 打开高德地图（如果安装了）或系统地图
-        uri = Uri.parse('geo:0,0?q=当前位置');
-        break;
-      default:
-        uri = null;
-    }
+    try {
+      switch (label) {
+        case '拍照':
+          await _openCamera();
+          return;
+        case '通讯录':
+          await _openContacts();
+          return;
+        case '扫码':
+          await _openQrScanner();
+          return;
+      }
 
-    if (uri != null) {
-      try {
+      // 以下功能依赖第三方 App，使用 url_launcher
+      final uri = switch (label) {
+        '健康码' => Uri.parse('weixin://dl/business/?t=healthcode'),
+        '乘车' => Uri.parse('alipays://platformapi/startapp?appId=20000134'),
+        '缴费' => Uri.parse('alipays://platformapi/startapp?appId=20000178'),
+        '视频通话' => Uri.parse('weixin://'),
+        '地图' => Uri.parse('geo:0,0?q=当前位置'),
+        _ => null,
+      };
+
+      if (uri != null) {
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
@@ -102,12 +76,51 @@ class _HomeScreenState extends State<HomeScreen> {
             SnackBar(content: Text('未安装「$label」对应的应用')),
           );
         }
-      } catch (e) {
-        if (!mounted) return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('打开「$label」失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _openCamera() async {
+    final picker = ImagePicker();
+    final photo = await picker.pickImage(source: ImageSource.camera);
+    if (photo != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('照片已拍摄')),
+      );
+    }
+  }
+
+  Future<void> _openContacts() async {
+    if (await FlutterContacts.requestPermission()) {
+      final contact = await FlutterContacts.openExternalPick();
+      if (contact != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('打开「$label」失败: $e')),
+          SnackBar(content: Text('已选择联系人: ${contact.displayName}')),
         );
       }
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未授予通讯录权限')),
+      );
+    }
+  }
+
+  Future<void> _openQrScanner() async {
+    if (!mounted) return;
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const _QrScannerScreen()),
+    );
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('扫码结果: $result')),
+      );
     }
   }
 
@@ -187,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF4A90E2).withOpacity(0.1),
+              color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, size: 32, color: const Color(0xFF4A90E2)),
@@ -208,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF4A90E2).withOpacity(0.1),
+            color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.menu_book, size: 32, color: Color(0xFF4A90E2)),
@@ -218,6 +231,35 @@ class _HomeScreenState extends State<HomeScreen> {
         trailing: const Icon(Icons.arrow_forward_ios, size: 20),
         onTap: () {
           Navigator.push(context, MaterialPageRoute(builder: (_) => TutorialDetailScreen(tutorial: tutorial)));
+        },
+      ),
+    );
+  }
+}
+
+/// 扫码页面
+class _QrScannerScreen extends StatefulWidget {
+  const _QrScannerScreen();
+
+  @override
+  State<_QrScannerScreen> createState() => _QrScannerScreenState();
+}
+
+class _QrScannerScreenState extends State<_QrScannerScreen> {
+  bool _scanned = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('扫码')),
+      body: MobileScanner(
+        onDetect: (capture) {
+          if (_scanned) return;
+          final barcode = capture.barcodes.firstOrNull;
+          if (barcode?.rawValue != null) {
+            _scanned = true;
+            Navigator.pop(context, barcode!.rawValue);
+          }
         },
       ),
     );

@@ -40,9 +40,9 @@ class _SplashScreenState extends State<SplashScreen> {
       final result = await ApiService.getProfile();
       if (!mounted) return;
 
-      if (result['success'] == true) {
+      if (result['success'] == true && result['data'] != null) {
         // 同步服务端字体设置
-        final serverFontSize = result['data']['font_size'] ?? 'large';
+        final serverFontSize = result['data']['font_size']?.toString() ?? 'large';
         await fontProvider.setFromServer(serverFontSize);
         if (!mounted) return;
         Navigator.pushReplacement(
