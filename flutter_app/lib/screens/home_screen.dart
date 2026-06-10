@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../providers/font_size_provider.dart';
 import '../services/api_service.dart';
@@ -63,7 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
         '乘车' => Uri.parse('alipays://platformapi/startapp?appId=20000134'),
         '缴费' => Uri.parse('alipays://platformapi/startapp?appId=20000178'),
         '视频通话' => Uri.parse('weixin://'),
-        '地图' => Uri.parse('geo:0,0?q=当前位置'),
+        '地图' => Uri.parse('https://uri.amap.com/marker?position=116.397428,39.90923'),
         _ => null,
       };
 
@@ -72,8 +73,13 @@ class _HomeScreenState extends State<HomeScreen> {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
           if (!mounted) return;
+          final appName = switch (label) {
+            '健康码' || '乘车' || '缴费' || '视频通话' => '微信',
+            '地图' => '地图应用',
+            _ => label,
+          };
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('未安装「$label」对应的应用')),
+            SnackBar(content: Text('请先安装「$appName」后再使用此功能')),
           );
         }
       }
@@ -96,13 +102,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openContacts() async {
-    if (await FlutterContacts.requestPermission()) {
+    final status = await Permission.contacts.request();
+    if (status.isGranted) {
       final contact = await FlutterContacts.openExternalPick();
       if (contact != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('已选择联系人: ${contact.displayName}')),
         );
       }
+    } else if (status.isPermanentlyDenied) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('通讯录权限被拒绝，请在设置中开启'),
+          action: SnackBarAction(
+            label: '去设置',
+            onPressed: () => openAppSettings(),
+          ),
+        ),
+      );
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

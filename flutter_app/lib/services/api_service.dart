@@ -1,14 +1,11 @@
-import 'dart:convert';
-import 'dart:io' show Platform;
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_config.dart';
 
 class ApiService {
-  // Android 模拟器用 10.0.2.2，其他平台用 localhost
-  static String get baseUrl {
-    if (Platform.isAndroid) return 'http://10.0.2.2:3001/api';
-    return 'http://localhost:3001/api';
-  }
+  static String get baseUrl => AppConfig.apiBaseUrl;
+
   static String? _token;
 
   static Future<void> setToken(String token) async {
@@ -125,5 +122,31 @@ class ApiService {
   // Online Status
   static Future<Map<String, dynamic>> getOnlineStatus(List<int> userIds) async {
     return _request('POST', '/users/online-status', body: {'userIds': userIds});
-  }  
+  }
+
+  // Security
+  static Future<Map<String, dynamic>> checkFraud(String text) async {
+    return _request('POST', '/security/check-fraud', body: {'text': text});
+  }
+
+  static Future<Map<String, dynamic>> checkPayment(double amount) async {
+    return _request('POST', '/security/check-payment', body: {'amount': amount});
+  }
+
+  static Future<Map<String, dynamic>> getSecurityEvents({int? page, int? pageSize, String? severity}) async {
+    final params = <String>[];
+    if (page != null) params.add('page=$page');
+    if (pageSize != null) params.add('pageSize=$pageSize');
+    if (severity != null) params.add('severity=$severity');
+    final query = params.isNotEmpty ? '?${params.join('&')}' : '';
+    return _request('GET', '/security/events$query');
+  }
+
+  static Future<Map<String, dynamic>> resolveSecurityEvent(int eventId) async {
+    return _request('PUT', '/security/events/$eventId/resolve');
+  }
+
+  static Future<Map<String, dynamic>> getSecurityStats() async {
+    return _request('GET', '/security/stats');
+  }
 }

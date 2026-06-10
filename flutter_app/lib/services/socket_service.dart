@@ -1,4 +1,5 @@
 ﻿import 'package:socket_io_client/socket_io_client.dart' as io;
+import '../config/app_config.dart';
 
 class SocketService {
   static io.Socket? _socket;
@@ -6,7 +7,7 @@ class SocketService {
   static Future<void> connect() async {
     if (_socket != null && _socket!.connected) return;
 
-    _socket = io.io('http://localhost:3001', <String, dynamic>{
+    _socket = io.io(AppConfig.socketUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });
@@ -71,7 +72,6 @@ class SocketService {
     _socket?.on('session_ended', callback);
   }
 
-  // 移除指定事件监听
   static void offMessage() {
     _socket?.off('message');
   }
@@ -88,7 +88,6 @@ class SocketService {
     _socket?.off('session_ended');
   }
 
-  /// 移除所有业务事件监听（保留 connect/disconnect）
   static void removeAllListeners() {
     offMessage();
     offScreenshot();

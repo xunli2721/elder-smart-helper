@@ -119,25 +119,27 @@ flutter test
 ```
 elder-smart-helper/
 ├── flutter_app/              # Flutter 移动端应用
-│   ├── lib/                  # 源代码
+│   ├── lib/
+│   │   ├── config/           # 配置（主题、服务器地址）
+│   │   ├── models/           # 数据模型
+│   │   ├── providers/        # 状态管理
+│   │   ├── screens/          # 页面（首页、教程、远程协助、设置）
+│   │   ├── services/         # 网络服务（API、Socket、TTS）
+│   │   └── widgets/          # 自定义组件（标注画布）
 │   ├── test/                 # 测试文件
-│   ├── BUILD.md              # 构建指南
 │   └── pubspec.yaml          # 依赖配置
 ├── server/                   # Node.js 后端服务
-│   ├── src/                  # 源代码
-│   │   ├── controllers/      # 控制器
-│   │   ├── routes/           # 路由
-│   │   ├── services/         # 服务层
-│   │   ├── middleware/       # 中间件
-│   │   └── config/           # 配置
-│   ├── tests/                # 测试文件
-│   ├── Dockerfile            # Docker 配置
-│   └── DEPLOYMENT.md         # 部署指南
+│   ├── src/
+│   │   ├── controllers/      # 控制器（认证、教程、远程协助、安全）
+│   │   ├── routes/           # 路由定义
+│   │   ├── services/         # 服务层（安全检测、通知、Socket）
+│   │   ├── middleware/       # 中间件（JWT 认证、角色校验）
+│   │   └── config/           # 配置（数据库、Swagger）
+│   ├── tests/                # 测试文件（单元测试 + 集成测试）
+│   └── Dockerfile            # Docker 配置
 ├── database/                 # 数据库脚本
-│   ├── migrations/           # 迁移脚本
-│   ├── seeds/                # 种子数据
-│   ├── run_migration.js      # 迁移工具
-│   └── BACKUP.md             # 备份指南
+│   ├── schema.sql            # 建表 + 种子数据（10 条教程）
+│   └── run_migration.js      # 迁移工具
 ├── docker-compose.yml        # Docker Compose 配置
 └── README.md
 ```
