@@ -45,5 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>weixin</string>
+		<string>alipay</string>
+		<string>alipays</string>
+		<string>amap</string>
+		<string>amapuri</string>
+	</array>
+	<key>NSContactsUsageDescription</key>
+	<string>需要访问通讯录以选择联系人拨打电话</string>
+	<key>NSCameraUsageDescription</key>
+	<string>需要相机权限以使用扫码和拍照功能</string>
 </dict>
 </plist>

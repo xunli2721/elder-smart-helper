@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -15,7 +16,7 @@ class AnnotationItem {
   final Color color;
   final String? text;
 
-  AnnotationItem({
+  const AnnotationItem({
     required this.tool,
     required this.points,
     required this.color,
@@ -75,6 +76,7 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
 
   @override
   void dispose() {
+    _bgImage?.dispose();
     _textController.dispose();
     super.dispose();
   }
@@ -165,11 +167,15 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData != null) {
         widget.onComplete(byteData.buffer.asUint8List());
+        if (mounted) {
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
+      debugPrint('标注保存失败: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败: $e')),
+          const SnackBar(content: Text('保存失败，请重试')),
         );
       }
     }
@@ -445,24 +451,22 @@ class _AnnotationPainter extends CustomPainter {
     for (int i = 1; i < points.length; i++) {
       path.lineTo(points[i].dx, points[i].dy);
     }
-    canvas.drawPath(path, paint..style = PaintingStyle.stroke);
+    canvas.drawPath(path, paint);
   }
 
   void _drawCircle(Canvas canvas, List<Offset> points, Paint paint) {
     final start = points.first;
     final end = points.last;
     final rect = Rect.fromPoints(start, end);
-    canvas.drawOval(rect, paint..style = PaintingStyle.stroke);
+    canvas.drawOval(rect, paint);
   }
 
   void _drawArrow(Canvas canvas, List<Offset> points, Paint paint) {
     final start = points.first;
     final end = points.last;
 
-    // 画线
     canvas.drawLine(start, end, paint);
 
-    // 画箭头
     final dx = end.dx - start.dx;
     final dy = end.dy - start.dy;
     final angle = atan2(dy, dx);
@@ -480,7 +484,7 @@ class _AnnotationPainter extends CustomPainter {
         end.dx - arrowLength * cos(angle + arrowAngle),
         end.dy - arrowLength * sin(angle + arrowAngle),
       );
-    canvas.drawPath(path, paint..style = PaintingStyle.stroke);
+    canvas.drawPath(path, paint);
   }
 
   void _drawText(Canvas canvas, Offset position, String text, Color color) {
@@ -509,6 +513,7 @@ class _AnnotationPainter extends CustomPainter {
         oldDelegate.scale != scale ||
         oldDelegate.offset != offset ||
         oldDelegate.currentTool != currentTool ||
+        oldDelegate.currentColor != currentColor ||
         oldDelegate.image != image;
   }
 }

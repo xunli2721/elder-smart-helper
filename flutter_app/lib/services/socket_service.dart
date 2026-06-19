@@ -1,29 +1,78 @@
-﻿import 'package:socket_io_client/socket_io_client.dart' as io;
-import '../config/app_config.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:elder_smart_helper/config/app_config.dart';
+import 'package:elder_smart_helper/services/api_service.dart';
 
 class SocketService {
   static io.Socket? _socket;
+  static int? _currentSessionId;
 
-  static Future<void> connect() async {
-    if (_socket != null && _socket!.connected) return;
+  static int? get currentSessionId => _currentSessionId;
+
+  static bool get isConnected => _socket != null && _socket!.connected;
+
+  static Future<void> connect({int? userId}) async {
+    if (_socket != null && _socket!.connected) {
+      // 已连接，仅更新在线状态
+      if (userId != null) {
+        _socket!.emit('user_online', userId);
+      }
+      return;
+    }
+
+    final token = await ApiService.getToken();
+    if (token == null) {
+      throw Exception('未登录，无法建立连接');
+    }
+
+    final completer = Completer<void>();
 
     _socket = io.io(AppConfig.socketUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
+      'auth': {'token': token},
+    });
+
+    _socket!.onConnect((_) {
+      debugPrint('Socket connected');
+      // 通知服务端用户上线
+      if (userId != null) {
+        _socket!.emit('user_online', userId);
+      }
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    _socket!.onConnectError((data) {
+      debugPrint('Socket connect error: $data');
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('连接失败: $data'));
+      }
+    });
+
+    _socket!.onError((data) {
+      debugPrint('Socket error: $data');
     });
 
     _socket!.connect();
 
-    _socket!.onConnect((_) {
-      print('Socket connected');
-    });
-
-    _socket!.onDisconnect((_) {
-      print('Socket disconnected');
-    });
+    // 10 秒连接超时
+    return completer.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        if (!completer.isCompleted) {
+          _socket?.disconnect();
+          _socket = null;
+          throw Exception('连接超时');
+        }
+      },
+    );
   }
 
   static void joinSession(int sessionId) {
+    _currentSessionId = sessionId;
     _socket?.emit('join_session', sessionId);
   }
 
@@ -35,7 +84,10 @@ class SocketService {
     });
   }
 
-  static void sendAnnotation(int sessionId, Map<String, dynamic> annotation) {
+  static void sendAnnotation(
+    int sessionId,
+    Map<String, dynamic> annotation,
+  ) {
     _socket?.emit('annotation', {
       'sessionId': sessionId,
       'annotation': annotation,
@@ -54,6 +106,7 @@ class SocketService {
 
   static void endSession(int sessionId) {
     _socket?.emit('end_session', {'sessionId': sessionId});
+    _currentSessionId = null;
   }
 
   static void onScreenshot(Function(dynamic) callback) {
@@ -96,8 +149,8 @@ class SocketService {
   }
 
   static void disconnect() {
-    removeAllListeners();
     _socket?.disconnect();
     _socket = null;
+    _currentSessionId = null;
   }
 }

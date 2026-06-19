@@ -1,10 +1,14 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
-import '../providers/font_size_provider.dart';
-import '../services/api_service.dart';
-import '../services/socket_service.dart';
-import '../widgets/annotation_canvas.dart';
+import 'package:elder_smart_helper/providers/font_size_provider.dart';
+import 'package:elder_smart_helper/services/api_service.dart';
+import 'package:elder_smart_helper/services/socket_service.dart';
+import 'package:elder_smart_helper/widgets/annotation_canvas.dart';
+import 'package:elder_smart_helper/utils/remote_assist_utils.dart';
 
 class RemoteAssistScreen extends StatefulWidget {
   const RemoteAssistScreen({super.key});
@@ -19,8 +23,11 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   Map<String, bool> _onlineStatus = {};
   bool _loading = true;
   int? _activeSessionId;
+  int? _currentUserId;
   final List<Map<String, dynamic>> _messages = [];
   final _messageController = TextEditingController();
+  final _scrollController = ScrollController();
+  final GlobalKey _chatListKey = GlobalKey();
 
   @override
   void initState() {
@@ -31,13 +38,26 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      final familyResult = await ApiService.getFamily();
-      final sessionResult = await ApiService.getRemoteSessions();
-      final familyList = (familyResult['success'] == true && familyResult['data'] != null)
-          ? familyResult['data'] as List
-          : <dynamic>[];
+      // 并行获取用户信息、家人列表、会话列表
+      final results = await Future.wait([
+        ApiService.getProfile(),
+        ApiService.getFamily(),
+        ApiService.getRemoteSessions(),
+      ]);
+      final profileResult = results[0];
+      final familyResult = results[1];
+      final sessionResult = results[2];
 
-      // 查询家人在线状态
+      // 获取当前用户 ID
+      if (profileResult['success'] == true && profileResult['data'] != null) {
+        final id = profileResult['data']['id'];
+        _currentUserId = id is int ? id : int.tryParse(id.toString());
+      }
+      final familyList =
+          (familyResult['success'] == true && familyResult['data'] != null)
+              ? familyResult['data'] as List
+              : <dynamic>[];
+
       Map<String, bool> onlineStatus = {};
       if (familyList.isNotEmpty) {
         final ids = familyList
@@ -48,11 +68,13 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         if (ids.isNotEmpty) {
           try {
             final statusResult = await ApiService.getOnlineStatus(ids);
-            if (statusResult['success'] == true && statusResult['data'] != null) {
+            if (statusResult['success'] == true &&
+                statusResult['data'] != null) {
               final data = statusResult['data'];
               if (data is Map) {
                 onlineStatus = Map.fromEntries(
-                  data.entries.map((e) => MapEntry(e.key.toString(), e.value == true)),
+                  data.entries
+                      .map((e) => MapEntry(e.key.toString(), e.value == true)),
                 );
               }
             }
@@ -63,13 +85,15 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       if (!mounted) return;
       setState(() {
         _family = familyList;
-        _sessions = (sessionResult['success'] == true && sessionResult['data'] != null)
-            ? sessionResult['data'] as List
-            : <dynamic>[];
+        _sessions =
+            (sessionResult['success'] == true && sessionResult['data'] != null)
+                ? sessionResult['data'] as List
+                : <dynamic>[];
         _onlineStatus = onlineStatus;
         _loading = false;
       });
     } catch (e) {
+      debugPrint('加载远程协助数据失败: $e');
       if (!mounted) return;
       setState(() => _loading = false);
     }
@@ -82,41 +106,62 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         final sessionId = result['data']['session_id'];
         if (sessionId == null) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('创建会话失败')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('创建会话失败')));
           return;
         }
-        setState(() => _activeSessionId = sessionId is int ? sessionId : int.tryParse(sessionId.toString()));
+        setState(() => _activeSessionId =
+            sessionId is int ? sessionId : int.tryParse(sessionId.toString()));
 
-        await SocketService.connect();
+        try {
+          await SocketService.connect(userId: _currentUserId);
+        } catch (e) {
+          debugPrint('Socket 连接失败: $e');
+          if (mounted) {
+            setState(() => _activeSessionId = null);
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('连接失败，请检查网络后重试')));
+          }
+          return;
+        }
+
         if (_activeSessionId != null) {
           SocketService.joinSession(_activeSessionId!);
           _registerSocketListeners();
         }
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已向 $familyName 发起协助请求')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('已向 $familyName 发起协助请求')));
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'] ?? '发起失败')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result['message'] ?? '发起失败')));
       }
     } catch (e) {
+      debugPrint('发起协助失败: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('网络错误: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('网络连接失败，请检查网络后重试')));
     }
   }
 
   void _registerSocketListeners() {
     SocketService.removeAllListeners();
 
-    // 文字消息
     SocketService.onMessage((data) {
       if (!mounted) return;
       setState(() {
-        _messages.add({'type': 'text', 'text': data['message'], 'isMe': false, 'sender': data['sender']});
+        _messages.add({
+          'type': 'text',
+          'text': data['message'],
+          'isMe': false,
+          'sender': data['sender'],
+        });
       });
+      _scrollToBottom();
     });
 
-    // 截图消息
     SocketService.onScreenshot((data) {
       if (!mounted) return;
       setState(() {
@@ -127,9 +172,9 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           'sender': data['sender'] ?? '对方',
         });
       });
+      _scrollToBottom();
     });
 
-    // 标注消息
     SocketService.onAnnotation((data) {
       if (!mounted) return;
       final annotation = data['annotation'];
@@ -142,13 +187,27 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
             'sender': data['sender'] ?? '对方',
           });
         });
+        _scrollToBottom();
       }
     });
 
     SocketService.onSessionEnded((data) {
       if (!mounted) return;
       setState(() => _activeSessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('协助会话已结束')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('协助会话已结束')));
+    });
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
@@ -158,18 +217,53 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
 
     SocketService.sendMessage(_activeSessionId!, text, '我');
     setState(() {
-      _messages.add({'type': 'text', 'text': text, 'isMe': true, 'sender': '我'});
+      _messages
+          .add({'type': 'text', 'text': text, 'isMe': true, 'sender': '我'});
     });
     _messageController.clear();
+    _scrollToBottom();
   }
 
-  /// 截屏并发送
+  /// 截屏并发送（仅截取消息列表区域）
   Future<void> _takeScreenshot() async {
     if (_activeSessionId == null) return;
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('截图功能暂不可用')),
-    );
+    try {
+      final boundary = _chatListKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+      String? base64Image;
+      try {
+        final ByteData? byteData =
+            await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) {
+          base64Image = base64Encode(byteData.buffer.asUint8List());
+        }
+      } finally {
+        image.dispose();
+      }
+
+      if (base64Image == null) return;
+
+      SocketService.sendScreenshot(_activeSessionId!, base64Image);
+
+      if (!mounted) return;
+      setState(() {
+        _messages.add({
+          'type': 'screenshot',
+          'imageBase64': base64Image!,
+          'isMe': true,
+          'sender': '我',
+        });
+      });
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('截图失败: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('截图失败，请重试')));
+    }
   }
 
   /// 打开标注页面
@@ -181,20 +275,21 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         builder: (_) => AnnotationCanvas(
           imageBytes: imageBytes,
           onComplete: (annotatedBytes) {
+            if (_activeSessionId == null) return;
             final annotatedBase64 = base64Encode(annotatedBytes);
-            // 发送标注结果
-            SocketService.sendAnnotation(_activeSessionId!, {
-              'imageBase64': annotatedBase64,
-            });
-            setState(() {
-              _messages.add({
-                'type': 'annotation',
-                'imageBase64': annotatedBase64,
-                'isMe': true,
-                'sender': '我',
+            SocketService.sendAnnotation(
+                _activeSessionId!, {'imageBase64': annotatedBase64});
+            if (mounted) {
+              setState(() {
+                _messages.add({
+                  'type': 'annotation',
+                  'imageBase64': annotatedBase64,
+                  'isMe': true,
+                  'sender': '我',
+                });
               });
-            });
-            Navigator.pop(context);
+              _scrollToBottom();
+            }
           },
         ),
       ),
@@ -212,11 +307,59 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     }
   }
 
+  Future<void> _respondSession(int sessionId, String newStatus) async {
+    try {
+      final result = await ApiService.updateSessionStatus(sessionId, newStatus);
+      if (result['success'] == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text(newStatus == 'active' ? '已接受请求' : '已拒绝请求')),
+        );
+        await _loadData();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? '操作失败')),
+        );
+      }
+    } catch (e) {
+      debugPrint('响应协助请求失败: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('操作失败，请检查网络后重试')));
+    }
+  }
+
+  void _onSessionTap(int sessionId, String status) {
+    if (status == 'active') {
+      setState(() => _activeSessionId = sessionId);
+      SocketService.connect(userId: _currentUserId).then((_) {
+        if (!mounted) return;
+        SocketService.joinSession(sessionId);
+        _registerSocketListeners();
+      }).catchError((e) {
+        debugPrint('重新加入会话失败: $e');
+        if (mounted) {
+          setState(() => _activeSessionId = null);
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('连接失败，请检查网络后重试')));
+        }
+      });
+    } else if (status == 'requested') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先接受或拒绝此请求')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     SocketService.removeAllListeners();
     SocketService.disconnect();
     _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -224,7 +367,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('远程协助'), automaticallyImplyLeading: false),
+        appBar: AppBar(
+            title: const Text('远程协助'), automaticallyImplyLeading: false),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -239,13 +383,17 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         title: const Text('远程协助'),
         automaticallyImplyLeading: false,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData, tooltip: '刷新'),
+          IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadData,
+              tooltip: '刷新'),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('发起协助', style: TextStyle(fontSize: s(22), fontWeight: FontWeight.bold)),
+          Text('发起协助',
+              style: TextStyle(fontSize: s(22), fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           if (_family.isEmpty)
             Card(
@@ -253,11 +401,16 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    Icon(Icons.family_restroom, size: 60, color: Colors.grey[400]),
+                    Icon(Icons.family_restroom,
+                        size: 60, color: Colors.grey[400]),
                     const SizedBox(height: 12),
-                    Text('还没有绑定家人', style: TextStyle(fontSize: s(18), color: Colors.grey)),
+                    Text('还没有绑定家人',
+                        style:
+                            TextStyle(fontSize: s(18), color: Colors.grey)),
                     const SizedBox(height: 8),
-                    Text('请先到设置页面绑定家人账号', style: TextStyle(fontSize: s(16), color: Colors.grey)),
+                    Text('请先到设置页面绑定家人账号',
+                        style:
+                            TextStyle(fontSize: s(16), color: Colors.grey)),
                   ],
                 ),
               ),
@@ -274,7 +427,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                     children: [
                       Stack(
                         children: [
-                          const CircleAvatar(radius: 24, child: Icon(Icons.person, size: 28)),
+                          const CircleAvatar(
+                              radius: 24, child: Icon(Icons.person, size: 28)),
                           Positioned(
                             right: 0,
                             bottom: 0,
@@ -284,7 +438,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                               decoration: BoxDecoration(
                                 color: isOnline ? Colors.green : Colors.grey,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                                border:
+                                    Border.all(color: Colors.white, width: 2),
                               ),
                             ),
                           ),
@@ -295,11 +450,17 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(name, style: TextStyle(fontSize: s(20), fontWeight: FontWeight.bold)),
+                            Text(name,
+                                style: TextStyle(
+                                    fontSize: s(20),
+                                    fontWeight: FontWeight.bold)),
                             const SizedBox(height: 4),
                             Text(
-                              '${_relationshipText(f['relationship']?.toString())} · ${isOnline ? "在线" : "离线"}',
-                              style: TextStyle(fontSize: s(16), color: isOnline ? Colors.green : Colors.grey),
+                              '${relationshipText(f['relationship']?.toString())} · ${isOnline ? "在线" : "离线"}',
+                              style: TextStyle(
+                                  fontSize: s(16),
+                                  color:
+                                      isOnline ? Colors.green : Colors.grey),
                             ),
                           ],
                         ),
@@ -308,7 +469,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                         SizedBox(
                           width: 72,
                           child: ElevatedButton(
-                            onPressed: () => _requestAssist(f['id'] as int, name),
+                            onPressed: () =>
+                                _requestAssist(f['id'] as int, name),
                             child: const Text('求助'),
                           ),
                         ),
@@ -318,37 +480,83 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
               );
             }),
           const SizedBox(height: 24),
-          Text('历史记录', style: TextStyle(fontSize: s(22), fontWeight: FontWeight.bold)),
+          Text('历史记录',
+              style: TextStyle(fontSize: s(22), fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           if (_sessions.isEmpty)
-            Center(child: Text('暂无协助记录', style: TextStyle(fontSize: s(18), color: Colors.grey)))
+            Center(
+                child: Text('暂无协助记录',
+                    style: TextStyle(fontSize: s(18), color: Colors.grey)))
           else
-            ..._sessions.map((s2) {
-              final createdAt = s2['created_at']?.toString() ?? '';
-              final displayTime = createdAt.length >= 16 ? createdAt.substring(0, 16) : createdAt;
+            ..._sessions.map((session) {
+              final createdAt = session['created_at']?.toString() ?? '';
+              final displayTime =
+                  createdAt.length >= 16 ? createdAt.substring(0, 16) : createdAt;
+              final status = session['status']?.toString();
+              final sessionId = session['id'] is int
+                  ? session['id'] as int
+                  : int.tryParse(session['id']?.toString() ?? '');
+              final canTap = status == 'active' || status == 'requested';
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(_statusIcon(s2['status']?.toString()), size: 32, color: _statusColor(s2['status']?.toString())),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(s2['elderly_name']?.toString() ?? s2['assistant_name']?.toString() ?? '未知', style: TextStyle(fontSize: s(18))),
-                            const SizedBox(height: 4),
-                            Text(_statusText(s2['status']?.toString()), style: TextStyle(fontSize: s(16))),
-                          ],
+                child: InkWell(
+                  onTap: canTap && sessionId != null
+                      ? () => _onSessionTap(sessionId, status!)
+                      : null,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(sessionStatusIcon(status),
+                            size: 32, color: sessionStatusColor(status)),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  session['elderly_name']?.toString() ??
+                                      session['assistant_name']?.toString() ??
+                                      '未知',
+                                  style: TextStyle(fontSize: s(18))),
+                              const SizedBox(height: 4),
+                              Text(sessionStatusText(status),
+                                  style: TextStyle(
+                                      fontSize: s(16),
+                                      color: sessionStatusColor(status))),
+                            ],
+                          ),
                         ),
-                      ),
-                      Text(
-                        displayTime,
-                        style: TextStyle(fontSize: s(14), color: Colors.grey),
-                      ),
-                    ],
+                        if (status == 'requested')
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextButton(
+                                onPressed: sessionId != null
+                                    ? () =>
+                                        _respondSession(sessionId, 'active')
+                                    : null,
+                                child: const Text('接受'),
+                              ),
+                              TextButton(
+                                onPressed: sessionId != null
+                                    ? () => _respondSession(
+                                        sessionId, 'cancelled')
+                                    : null,
+                                child: const Text('拒绝',
+                                    style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                          )
+                        else
+                          Text(
+                            displayTime,
+                            style: TextStyle(
+                                fontSize: s(14), color: Colors.grey),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -361,94 +569,117 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   Widget _buildChatScreen() {
     final s = context.read<FontSizeProvider>().scaled;
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('远程协助中'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('结束协助'),
-                    content: const Text('确定要结束本次协助会话吗？'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _endSession();
-                        },
-                        child: const Text('确定'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              child: Text('结束', style: TextStyle(color: Colors.white, fontSize: s(16))),
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // 消息列表
-            Expanded(
-              child: _messages.isEmpty
-                  ? Center(child: Text('等待家人响应...\n可以发送消息或截图沟通', style: TextStyle(fontSize: s(18), color: Colors.grey), textAlign: TextAlign.center))
-                  : ListView.builder(
+      appBar: AppBar(
+        title: const Text('远程协助中'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('结束协助'),
+                  content: const Text('确定要结束本次协助会话吗？'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('取消')),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _endSession();
+                      },
+                      child: const Text('确定'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            child:
+                Text('结束', style: TextStyle(color: Colors.white, fontSize: s(16))),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // 消息列表（_chatListKey 仅绑定消息区域，截图时只截取此部分）
+          Expanded(
+            child: _messages.isEmpty
+                ? Center(
+                    child: Text(
+                      '等待家人响应...\n可以发送消息或截图沟通',
+                      style: TextStyle(fontSize: s(18), color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : RepaintBoundary(
+                    key: _chatListKey,
+                    child: ListView.builder(
+                      controller: _scrollController,
                       padding: const EdgeInsets.all(16),
                       itemCount: _messages.length,
-                      itemBuilder: (context, index) => _buildMessageBubble(_messages[index]),
+                      itemBuilder: (context, index) =>
+                          _buildMessageBubble(_messages[index]),
                     ),
+                  ),
+          ),
+          // 输入框 + 截图按钮
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
+                ),
+              ],
             ),
-            // 输入框 + 截图按钮
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -2))],
-              ),
-              child: Row(
-                children: [
-                  // 截图按钮
-                  GestureDetector(
-                    onTap: _takeScreenshot,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(Icons.camera_alt, color: Color(0xFF4A90E2), size: 24),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: _takeScreenshot,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
                     ),
+                    child: const Icon(Icons.camera_alt,
+                        color: Color(0xFF4A90E2), size: 24),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      style: TextStyle(fontSize: s(18)),
-                      decoration: InputDecoration(
-                        hintText: '输入消息...',
-                        hintStyle: TextStyle(fontSize: s(18)),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      ),
-                      onSubmitted: (_) => _sendMessage(),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    style: TextStyle(fontSize: s(18)),
+                    decoration: InputDecoration(
+                      hintText: '输入消息...',
+                      hintStyle: TextStyle(fontSize: s(18)),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
                     ),
+                    onSubmitted: (_) => _sendMessage(),
                   ),
-                  const SizedBox(width: 8),
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: const Color(0xFF4A90E2),
-                    child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white, size: 24),
-                      onPressed: _sendMessage,
-                    ),
+                ),
+                const SizedBox(width: 8),
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: const Color(0xFF4A90E2),
+                  child: IconButton(
+                    icon: const Icon(Icons.send,
+                        color: Colors.white, size: 24),
+                    onPressed: _sendMessage,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -461,7 +692,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.7),
         decoration: BoxDecoration(
           color: isMe ? const Color(0xFF4A90E2) : Colors.grey[200],
           borderRadius: BorderRadius.circular(16),
@@ -470,14 +702,19 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           borderRadius: BorderRadius.circular(16),
           child: type == 'text'
               ? Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Text(
                     msg['text'] ?? '',
-                    style: TextStyle(fontSize: s(18), color: isMe ? Colors.white : Colors.black87),
+                    style: TextStyle(
+                        fontSize: s(18),
+                        color: isMe ? Colors.white : Colors.black87),
                   ),
                 )
               : GestureDetector(
-                  onTap: type == 'screenshot' ? () => _openAnnotation(msg['imageBase64']) : null,
+                  onTap: type == 'screenshot'
+                      ? () => _openAnnotation(msg['imageBase64'])
+                      : null,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
@@ -497,12 +734,15 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                           bottom: 4,
                           right: 4,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.black54,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text('点击标注', style: TextStyle(color: Colors.white, fontSize: s(12))),
+                            child: Text('点击标注',
+                                style: TextStyle(
+                                    color: Colors.white, fontSize: s(12))),
                           ),
                         ),
                     ],
@@ -511,46 +751,5 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         ),
       ),
     );
-  }
-
-  String _relationshipText(String? rel) {
-    switch (rel) {
-      case 'child': return '子女';
-      case 'spouse': return '配偶';
-      case 'relative': return '亲属';
-      case 'friend': return '朋友';
-      case 'caregiver': return '护理人';
-      default: return '家人';
-    }
-  }
-
-  String _statusText(String? status) {
-    switch (status) {
-      case 'requested': return '等待响应';
-      case 'active': return '进行中';
-      case 'completed': return '已完成';
-      case 'cancelled': return '已取消';
-      default: return '未知';
-    }
-  }
-
-  IconData _statusIcon(String? status) {
-    switch (status) {
-      case 'requested': return Icons.hourglass_top;
-      case 'active': return Icons.videocam;
-      case 'completed': return Icons.check_circle;
-      case 'cancelled': return Icons.cancel;
-      default: return Icons.help;
-    }
-  }
-
-  Color _statusColor(String? status) {
-    switch (status) {
-      case 'requested': return Colors.orange;
-      case 'active': return Colors.green;
-      case 'completed': return Colors.blue;
-      case 'cancelled': return Colors.grey;
-      default: return Colors.grey;
-    }
   }
 }

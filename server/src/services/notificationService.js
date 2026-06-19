@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logger = require('../utils/logger');
 
 /**
  * 推送通知服务
@@ -14,14 +15,14 @@ let fcmInitialized = false;
 function initFCM() {
   const fcmKey = process.env.FCM_SERVER_KEY;
   if (!fcmKey) {
-    console.log('FCM_SERVER_KEY not set, push notifications will use Socket.io only');
+    logger.warn('FCM_SERVER_KEY not set, push notifications will use Socket.io only');
     return;
   }
   // TODO: 初始化 firebase-admin SDK
   // const admin = require('firebase-admin');
   // admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
   fcmInitialized = true;
-  console.log('FCM initialized');
+  logger.info('FCM initialized');
 }
 
 /**
@@ -59,7 +60,7 @@ async function sendNotification(userId, notification) {
 
     return { success: true, delivered: isOnline ? 'socket' : (fcmInitialized ? 'fcm' : 'saved') };
   } catch (err) {
-    console.error('Send notification error:', err);
+    logger.error('Send notification failed', { error: err.message });
     return { success: false, error: err.message };
   }
 }
@@ -76,7 +77,7 @@ async function sendFCMNotification(userId, notification) {
     );
 
     if (devices.length === 0) {
-      console.log(`No FCM token found for user ${userId}`);
+      logger.debug('No FCM token found', { userId });
       return;
     }
 
@@ -91,9 +92,9 @@ async function sendFCMNotification(userId, notification) {
     // };
     // await admin.messaging().send(message);
 
-    console.log(`FCM notification queued for user ${userId}`);
+    logger.info('FCM notification queued', { userId });
   } catch (err) {
-    console.error('FCM send error:', err);
+    logger.error('FCM send failed', { error: err.message });
   }
 }
 
@@ -116,7 +117,7 @@ async function saveNotification(userId, notification) {
       );
     }
   } catch (err) {
-    console.error('Save notification error:', err);
+    logger.error('Save notification failed', { error: err.message });
   }
 }
 
@@ -184,7 +185,7 @@ async function registerDevice(userId, deviceInfo) {
 
     return { success: true };
   } catch (err) {
-    console.error('Register device error:', err);
+    logger.error('Register device failed', { error: err.message });
     return { success: false, error: err.message };
   }
 }

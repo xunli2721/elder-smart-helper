@@ -129,4 +129,40 @@ router.get('/sessions', remoteController.getSessions);
  */
 router.put('/sessions/:id/status', remoteController.updateStatus);
 
+/**
+ * @swagger
+ * /api/remote/sessions/{id}/messages:
+ *   get:
+ *     summary: 获取会话历史消息
+ *     tags: [Remote Assistance]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: 会话 ID
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: 页码
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: 每页数量
+ *     responses:
+ *       200:
+ *         description: 成功获取消息列表
+ *       404:
+ *         description: 会话不存在
+ */
+router.get('/sessions/:id/messages', remoteController.getMessages);
+
 module.exports = router;

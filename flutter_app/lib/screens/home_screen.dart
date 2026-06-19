@@ -58,13 +58,22 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
       }
 
+      // 打电话：从通讯录选人后拨号
+      if (label == '打电话') {
+        await _makePhoneCall();
+        return;
+      }
+
+      // 地图：优先高德地图 App
+      if (label == '地图') {
+        await _openMap();
+        return;
+      }
+
       // 以下功能依赖第三方 App，使用 url_launcher
       final uri = switch (label) {
-        '健康码' => Uri.parse('weixin://dl/business/?t=healthcode'),
-        '乘车' => Uri.parse('alipays://platformapi/startapp?appId=20000134'),
-        '缴费' => Uri.parse('alipays://platformapi/startapp?appId=20000178'),
-        '视频通话' => Uri.parse('weixin://'),
-        '地图' => Uri.parse('https://uri.amap.com/marker?position=116.397428,39.90923'),
+        '地铁' => Uri.parse('alipays://platformapi/startapp?appId=20000174'),
+        '支付宝缴费' => Uri.parse('alipays://platformapi/startapp?appId=20000178'),
         _ => null,
       };
 
@@ -73,13 +82,8 @@ class _HomeScreenState extends State<HomeScreen> {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
           if (!mounted) return;
-          final appName = switch (label) {
-            '健康码' || '乘车' || '缴费' || '视频通话' => '微信',
-            '地图' => '地图应用',
-            _ => label,
-          };
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('请先安装「$appName」后再使用此功能')),
+            const SnackBar(content: Text('请先安装「支付宝」后再使用此功能')),
           );
         }
       }
@@ -135,11 +139,166 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(builder: (_) => const _QrScannerScreen()),
     );
-    if (result != null && mounted) {
+    if (result == null || !mounted) return;
+    await _handleScanResult(result);
+  }
+
+  /// 智能处理扫码结果
+  Future<void> _handleScanResult(String result) async {
+    final trimmed = result.trim();
+
+    // 空结果
+    if (trimmed.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('扫码结果: $result')),
+        const SnackBar(content: Text('扫码结果为空')),
       );
+      return;
     }
+
+    // 微信 scheme 链接
+    if (trimmed.startsWith('weixin://')) {
+      final uri = Uri.tryParse(trimmed);
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    // 支付宝 scheme 链接
+    if (trimmed.startsWith('alipay://') ||
+        trimmed.startsWith('alipays://')) {
+      final uri = Uri.tryParse(trimmed);
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    // URL（https 或 http）
+    if (trimmed.startsWith('https://') ||
+        trimmed.startsWith('http://')) {
+      final uri = Uri.tryParse(trimmed);
+      if (uri == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无效的链接')),
+        );
+        return;
+      }
+
+      // 检测微信相关域名，跳转微信打开
+      final host = uri.host.toLowerCase();
+      if (host.contains('weixin.qq.com') ||
+          host.contains('wechat.com') ||
+          host.contains('weixin.qq.com')) {
+        final wechatUri = Uri.parse('weixin://');
+        if (await canLaunchUrl(wechatUri)) {
+          await launchUrl(wechatUri,
+              mode: LaunchMode.externalApplication);
+          return;
+        }
+      }
+
+      // 其他 URL → 打开浏览器
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return;
+    }
+
+    // 其他文本 → 弹窗显示
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('扫码结果'),
+        content: SelectableText(trimmed),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 打电话：从通讯录选人后拨号
+  Future<void> _makePhoneCall() async {
+    final status = await Permission.contacts.request();
+    if (!status.isGranted) {
+      if (!mounted) return;
+      if (status.isPermanentlyDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('通讯录权限被拒绝，请在设置中开启'),
+            action: SnackBarAction(
+              label: '去设置',
+              onPressed: () => openAppSettings(),
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未授予通讯录权限')),
+        );
+      }
+      return;
+    }
+
+    final contact = await FlutterContacts.openExternalPick();
+    if (contact == null) return;
+
+    // 获取完整联系人信息（包含电话号码）
+    final fullContact = await FlutterContacts.getContact(contact.id);
+    if (!mounted) return;
+    if (fullContact == null || fullContact.phones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该联系人没有电话号码')),
+      );
+      return;
+    }
+
+    // 清理电话号码中的特殊字符
+    final phone = fullContact.phones.first.number
+        .replaceAll(RegExp(r'[^\d+#*]'), '');
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('电话号码格式无效')),
+      );
+      return;
+    }
+
+    final telUri = Uri(scheme: 'tel', path: phone);
+    if (await canLaunchUrl(telUri)) {
+      await launchUrl(telUri);
+    }
+  }
+
+  /// 打开地图：优先高德地图 App，失败则打开网页
+  Future<void> _openMap() async {
+    // 高德地图 App scheme
+    final amapUri = Uri.parse('amapuri://map/marker?position=116.397428,39.90923&name=当前位置');
+    // 网页备用
+    final webUri = Uri.parse('https://uri.amap.com/marker?position=116.397428,39.90923');
+
+    // 优先尝试高德地图 App
+    if (await canLaunchUrl(amapUri)) {
+      await launchUrl(amapUri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    // 回退到网页版
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('无法打开地图，请检查网络连接')),
+    );
   }
 
   @override
@@ -181,11 +340,10 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
               children: [
-                _quickAccess(Icons.health_and_safety, '健康码'),
                 _quickAccess(Icons.qr_code_scanner, '扫码'),
-                _quickAccess(Icons.directions_bus, '乘车'),
-                _quickAccess(Icons.payment, '缴费'),
-                _quickAccess(Icons.video_call, '视频通话'),
+                _quickAccess(Icons.subway, '地铁'),
+                _quickAccess(Icons.payment, '支付宝缴费'),
+                _quickAccess(Icons.phone, '打电话'),
                 _quickAccess(Icons.contacts, '通讯录'),
                 _quickAccess(Icons.camera_alt, '拍照'),
                 _quickAccess(Icons.map, '地图'),

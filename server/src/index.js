@@ -108,7 +108,7 @@ app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), authRoute
 // API routes
 app.use('/api/users', verifyToken, userRoutes);
 app.use('/api/tutorials', tutorialRoutes);
-app.use('/api/remote', verifyToken, remoteRoutes);
+app.use('/api/remote', verifyToken, rateLimit({ windowMs: 15 * 60 * 1000, max: 60 }), remoteRoutes);
 app.use('/api/security', verifyToken, securityRoutes);
 
 // 全局错误处理中间件

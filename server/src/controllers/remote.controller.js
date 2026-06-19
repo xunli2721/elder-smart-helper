@@ -1,5 +1,7 @@
 ﻿const db = require('../config/db');
 const notificationService = require('../services/notificationService');
+const socketService = require('../services/socketService');
+const logger = require('../utils/logger');
 
 // 发起协助请求
 exports.requestSession = async (req, res) => {
@@ -32,7 +34,7 @@ exports.requestSession = async (req, res) => {
 
     res.json({ success: true, data: { session_id: result.insertId } });
   } catch (err) {
-    console.error('RequestSession error:', err);
+    logger.error('RequestSession failed', { error: err.message });
     res.status(500).json({ success: false, message: '发起协助失败' });
   }
 };
@@ -91,7 +93,7 @@ exports.getSessions = async (req, res) => {
     const [sessions] = await db.query(sql, params);
     res.json({ success: true, data: sessions });
   } catch (err) {
-    console.error('GetSessions error:', err);
+    logger.error('GetSessions failed', { error: err.message });
     res.status(500).json({ success: false, message: '获取会话列表失败' });
   }
 };
@@ -138,7 +140,34 @@ exports.updateStatus = async (req, res) => {
 
     res.json({ success: true, message: '状态更新成功' });
   } catch (err) {
-    console.error('UpdateStatus error:', err);
+    logger.error('UpdateStatus failed', { error: err.message });
     res.status(500).json({ success: false, message: '更新会话状态失败' });
+  }
+};
+
+// 获取会话历史消息
+exports.getMessages = async (req, res) => {
+  try {
+    const { page, pageSize } = req.query;
+    const sessionId = req.params.id;
+
+    // 验证用户是否属于该会话
+    const [session] = await db.query(
+      'SELECT id FROM remote_sessions WHERE id = ? AND (elderly_user_id = ? OR assistant_user_id = ?)',
+      [sessionId, req.user.id, req.user.id]
+    );
+    if (session.length === 0) {
+      return res.status(404).json({ success: false, message: '会话不存在' });
+    }
+
+    const messages = await socketService.getSessionMessages(sessionId, {
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50,
+    });
+
+    res.json({ success: true, data: messages });
+  } catch (err) {
+    logger.error('GetMessages failed', { error: err.message });
+    res.status(500).json({ success: false, message: '获取消息失败' });
   }
 };
