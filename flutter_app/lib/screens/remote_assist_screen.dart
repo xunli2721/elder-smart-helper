@@ -1,8 +1,7 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:elder_smart_helper/providers/font_size_provider.dart';
 import 'package:elder_smart_helper/services/api_service.dart';
@@ -27,7 +26,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   final List<Map<String, dynamic>> _messages = [];
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  final GlobalKey _chatListKey = GlobalKey();
+  final _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -224,27 +223,49 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     _scrollToBottom();
   }
 
-  /// 截屏并发送（仅截取消息列表区域）
-  Future<void> _takeScreenshot() async {
+  /// 选择图片并发送（拍照 / 从相册选择）
+  void _showImageSourcePicker() {
+    if (_activeSessionId == null) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('拍照'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndSendImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('从相册选择'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndSendImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndSendImage(ImageSource source) async {
     if (_activeSessionId == null) return;
     try {
-      final boundary = _chatListKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary == null) return;
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 70,
+      );
+      if (pickedFile == null) return;
 
-      final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-      String? base64Image;
-      try {
-        final ByteData? byteData =
-            await image.toByteData(format: ui.ImageByteFormat.png);
-        if (byteData != null) {
-          base64Image = base64Encode(byteData.buffer.asUint8List());
-        }
-      } finally {
-        image.dispose();
-      }
-
-      if (base64Image == null) return;
+      final bytes = await pickedFile.readAsBytes();
+      final base64Image = base64Encode(bytes);
 
       SocketService.sendScreenshot(_activeSessionId!, base64Image);
 
@@ -252,17 +273,17 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       setState(() {
         _messages.add({
           'type': 'screenshot',
-          'imageBase64': base64Image!,
+          'imageBase64': base64Image,
           'isMe': true,
           'sender': '我',
         });
       });
       _scrollToBottom();
     } catch (e) {
-      debugPrint('截图失败: $e');
+      debugPrint('图片发送失败: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('截图失败，请重试')));
+          .showSnackBar(const SnackBar(content: Text('图片发送失败，请重试')));
     }
   }
 
@@ -601,25 +622,22 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       ),
       body: Column(
         children: [
-          // 消息列表（_chatListKey 仅绑定消息区域，截图时只截取此部分）
+          // 消息列表
           Expanded(
             child: _messages.isEmpty
                 ? Center(
                     child: Text(
-                      '等待家人响应...\n可以发送消息或截图沟通',
+                      '等待家人响应...\n可以发送消息或图片沟通',
                       style: TextStyle(fontSize: s(18), color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
                   )
-                : RepaintBoundary(
-                    key: _chatListKey,
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) =>
-                          _buildMessageBubble(_messages[index]),
-                    ),
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) =>
+                        _buildMessageBubble(_messages[index]),
                   ),
           ),
           // 输入框 + 截图按钮
@@ -638,7 +656,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: _takeScreenshot,
+                  onTap: _showImageSourcePicker,
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
