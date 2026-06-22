@@ -32,6 +32,8 @@ ElderSmartHelper 是一款专为中老年人设计的智能手机使用智能助
 - **数据库**：MySQL
 - **实时通信**：WebSocket (Socket.io，用于远程协助)
 - **认证**：JWT
+- **安全**：诈骗检测、支付风险预警
+- **部署**：Docker + PM2
 
 #### 安装教程
 
@@ -64,6 +66,42 @@ flutter pub get
 flutter run
 ```
 
+##### Docker 部署（推荐）
+```bash
+# 配置环境变量
+cp .env.docker .env
+# 编辑 .env 文件
+
+# 启动服务
+docker-compose up -d
+```
+
+#### API 文档
+
+启动后端服务后，访问以下地址查看 API 文档：
+```
+http://localhost:3000/api/docs
+```
+
+#### 安全功能
+
+本项目包含以下安全功能：
+- **诈骗检测**：识别文本中的诈骗关键词和可疑链接
+- **支付风险预警**：检测大额支付、高频支付、深夜支付等异常行为
+- **安全事件记录**：记录所有安全相关事件，支持查询和标记已解决
+
+#### 测试
+
+```bash
+# 运行后端测试
+cd server
+npm test
+
+# 运行 Flutter 测试
+cd flutter_app
+flutter test
+```
+
 #### 使用说明
 
 ##### 对于中老年用户
@@ -80,18 +118,44 @@ flutter run
 #### 项目结构
 ```
 elder-smart-helper/
-├── flutter_app/         # Flutter 移动端应用
-├── server/              # Node.js 后端服务
-├── database/            # 数据库脚本
-├── docs/                # 项目文档
-├── config/              # 配置文件
+├── flutter_app/              # Flutter 移动端应用
+│   ├── lib/
+│   │   ├── config/           # 配置（主题、服务器地址）
+│   │   ├── models/           # 数据模型
+│   │   ├── providers/        # 状态管理
+│   │   ├── screens/          # 页面（首页、教程、远程协助、设置）
+│   │   ├── services/         # 网络服务（API、Socket、TTS）
+│   │   └── widgets/          # 自定义组件（标注画布）
+│   ├── test/                 # 测试文件
+│   └── pubspec.yaml          # 依赖配置
+├── server/                   # Node.js 后端服务
+│   ├── src/
+│   │   ├── controllers/      # 控制器（认证、教程、远程协助、安全）
+│   │   ├── routes/           # 路由定义
+│   │   ├── services/         # 服务层（安全检测、通知、Socket）
+│   │   ├── middleware/       # 中间件（JWT 认证、角色校验）
+│   │   └── config/           # 配置（数据库、Swagger）
+│   ├── tests/                # 测试文件（单元测试 + 集成测试）
+│   └── Dockerfile            # Docker 配置
+├── database/                 # 数据库脚本
+│   ├── schema.sql            # 建表 + 种子数据（10 条教程）
+│   └── run_migration.js      # 迁移工具
+├── docker-compose.yml        # Docker Compose 配置
 └── README.md
 ```
 
 #### 路线图
 - [x] 第一阶段：项目规划与文档完善
-- [ ] 第二阶段：后端 API 开发（用户认证、教程、远程协助）
-- [ ] 第三阶段：Flutter 前端开发（全部页面与功能联调）
+- [x] 第二阶段：后端 API 开发（用户认证、教程、远程协助）
+- [x] 第三阶段：Flutter 前端开发（全部页面与功能联调）
+- [x] 第四阶段：数据库迁移与种子数据
+- [x] 第五阶段：后端测试（单元测试 + 集成测试，105 个测试用例）
+- [x] 第六阶段：Flutter 测试（模型测试 + Widget 测试）
+- [x] 第七阶段：Docker 部署配置
+- [x] 第八阶段：API 文档（Swagger UI）
+- [x] 第九阶段：安全功能（诈骗检测、支付风险预警）
+- [x] 第十阶段：推送通知服务
+- [x] 第十一阶段：项目文档补全（DEPLOYMENT、BUILD、BACKUP）
 
 #### 许可证
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情

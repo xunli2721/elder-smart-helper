@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: elder-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-elder_smart_helper}
+      MYSQL_USER: ${DB_USER:-elder_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-elder_password}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql
+      - ./database/seeds/001_sample_data.sql:/docker-entrypoint-initdb.d/002_seeds.sql
+    networks:
+      - elder-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: elder-server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-elder_smart_helper}
+      DB_USER: ${DB_USER:-elder_user}
+      DB_PASSWORD: ${DB_PASSWORD:-elder_password}
+      JWT_SECRET: ${JWT_SECRET:-change_this_to_a_secure_secret}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+    ports:
+      - "${SERVER_PORT:-3000}:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - elder-network
+
+volumes:
+  mysql_data:
+
+networks:
+  elder-network:
+    driver: bridge

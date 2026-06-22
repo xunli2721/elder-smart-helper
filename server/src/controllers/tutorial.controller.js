@@ -1,21 +1,54 @@
-const db = require('../config/db');
+﻿const db = require('../config/db');
 
-// 获取教程列表
+// 获取教程列表（支持分页）
 exports.getAll = async (req, res) => {
   try {
-    const { category } = req.query;
+    const { category, page, pageSize } = req.query;
     let sql = 'SELECT id, title, description, category, difficulty_level, image_url, steps FROM tutorials WHERE is_active = 1';
+    let countSql = 'SELECT COUNT(*) as total FROM tutorials WHERE is_active = 1';
     const params = [];
+    const countParams = [];
 
     if (category) {
       sql += ' AND category = ?';
+      countSql += ' AND category = ?';
       params.push(category);
+      countParams.push(category);
     }
 
     sql += ' ORDER BY created_at DESC';
-    const [tutorials] = await db.query(sql, params);
 
-    // 解析 steps JSON
+    // 分页：当传入 page 和 pageSize 时生效
+    if (page && pageSize) {
+      const pageNum = Math.max(1, parseInt(page));
+      const size = Math.min(Math.max(1, parseInt(pageSize)), 100);
+      const offset = (pageNum - 1) * size;
+      sql += ' LIMIT ? OFFSET ?';
+      params.push(size, offset);
+
+      const [[countResult]] = await db.query(countSql, countParams);
+      const total = countResult.total;
+      const [tutorials] = await db.query(sql, params);
+
+      const result = tutorials.map(t => ({
+        ...t,
+        steps: typeof t.steps === 'string' ? JSON.parse(t.steps) : t.steps
+      }));
+
+      return res.json({
+        success: true,
+        data: result,
+        pagination: {
+          page: pageNum,
+          pageSize: size,
+          total,
+          totalPages: Math.ceil(total / size),
+        },
+      });
+    }
+
+    // 不分页：保持向后兼容
+    const [tutorials] = await db.query(sql, params);
     const result = tutorials.map(t => ({
       ...t,
       steps: typeof t.steps === 'string' ? JSON.parse(t.steps) : t.steps
@@ -74,7 +107,7 @@ exports.update = async (req, res) => {
   try {
     const { title, description, category, difficulty_level, image_url, steps } = req.body;
     const [result] = await db.query(
-      'UPDATE tutorials SET title=?, description=?, category=?, difficulty_level=?, image_url=?, steps=? WHERE id=?',
+      'UPDATE tutorials SET title=?, description=?, category=?, difficulty_level=?, image_url=?, steps=? WHERE id=? AND is_active = 1',
       [title, description, category, difficulty_level, image_url, JSON.stringify(steps), req.params.id]
     );
 
@@ -89,10 +122,13 @@ exports.update = async (req, res) => {
   }
 };
 
-// 删除教程
+// 删除教程（软删除：标记 is_active = 0）
 exports.remove = async (req, res) => {
   try {
-    const [result] = await db.query('DELETE FROM tutorials WHERE id = ?', [req.params.id]);
+    const [result] = await db.query(
+      'UPDATE tutorials SET is_active = 0 WHERE id = ? AND is_active = 1',
+      [req.params.id]
+    );
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: '教程不存在' });
     }

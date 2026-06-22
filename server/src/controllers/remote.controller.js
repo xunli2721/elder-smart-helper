@@ -1,4 +1,7 @@
-const db = require('../config/db');
+﻿const db = require('../config/db');
+const notificationService = require('../services/notificationService');
+const socketService = require('../services/socketService');
+const logger = require('../utils/logger');
 
 // 发起协助请求
 exports.requestSession = async (req, res) => {
@@ -22,37 +25,75 @@ exports.requestSession = async (req, res) => {
       [req.user.id, assistant_user_id, 'requested', request_description || '']
     );
 
+    // 发送通知给协助者
+    await notificationService.sendSessionRequestNotification(
+      assistant_user_id,
+      req.user.name || '用户',
+      result.insertId
+    );
+
     res.json({ success: true, data: { session_id: result.insertId } });
   } catch (err) {
-    console.error('RequestSession error:', err);
+    logger.error('RequestSession failed', { error: err.message });
     res.status(500).json({ success: false, message: '发起协助失败' });
   }
 };
 
-// 获取会话列表
+// 获取会话列表（支持分页）
 exports.getSessions = async (req, res) => {
   try {
-    let sql, params;
+    const { page, pageSize } = req.query;
+    let sql, countSql, params, countParams;
+
     if (req.user.user_type === 'elderly') {
       sql = `SELECT rs.*, u.name as assistant_name
              FROM remote_sessions rs
              JOIN users u ON rs.assistant_user_id = u.id
-             WHERE rs.elderly_user_id = ?
-             ORDER BY rs.created_at DESC`;
+             WHERE rs.elderly_user_id = ?`;
+      countSql = 'SELECT COUNT(*) as total FROM remote_sessions WHERE elderly_user_id = ?';
       params = [req.user.id];
+      countParams = [req.user.id];
     } else {
       sql = `SELECT rs.*, u.name as elderly_name
              FROM remote_sessions rs
              JOIN users u ON rs.elderly_user_id = u.id
-             WHERE rs.assistant_user_id = ?
-             ORDER BY rs.created_at DESC`;
+             WHERE rs.assistant_user_id = ?`;
+      countSql = 'SELECT COUNT(*) as total FROM remote_sessions WHERE assistant_user_id = ?';
       params = [req.user.id];
+      countParams = [req.user.id];
     }
 
+    sql += ' ORDER BY rs.created_at DESC';
+
+    // 分页：当传入 page 和 pageSize 时生效
+    if (page && pageSize) {
+      const pageNum = Math.max(1, parseInt(page));
+      const size = Math.min(Math.max(1, parseInt(pageSize)), 100);
+      const offset = (pageNum - 1) * size;
+      sql += ' LIMIT ? OFFSET ?';
+      params.push(size, offset);
+
+      const [[countResult]] = await db.query(countSql, countParams);
+      const total = countResult.total;
+      const [sessions] = await db.query(sql, params);
+
+      return res.json({
+        success: true,
+        data: sessions,
+        pagination: {
+          page: pageNum,
+          pageSize: size,
+          total,
+          totalPages: Math.ceil(total / size),
+        },
+      });
+    }
+
+    // 不分页：保持向后兼容
     const [sessions] = await db.query(sql, params);
     res.json({ success: true, data: sessions });
   } catch (err) {
-    console.error('GetSessions error:', err);
+    logger.error('GetSessions failed', { error: err.message });
     res.status(500).json({ success: false, message: '获取会话列表失败' });
   }
 };
@@ -83,9 +124,50 @@ exports.updateStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: '会话不存在' });
     }
 
+    // 通知对方会话状态变更
+    const [session] = await db.query(
+      'SELECT elderly_user_id, assistant_user_id FROM remote_sessions WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (session.length > 0) {
+      const notifyUserId = session[0].elderly_user_id === req.user.id
+        ? session[0].assistant_user_id
+        : session[0].elderly_user_id;
+
+      await notificationService.sendSessionStatusNotification(notifyUserId, status, req.params.id);
+    }
+
     res.json({ success: true, message: '状态更新成功' });
   } catch (err) {
-    console.error('UpdateStatus error:', err);
-    res.status(500).json({ success: false, message: '更新状态失败' });
+    logger.error('UpdateStatus failed', { error: err.message });
+    res.status(500).json({ success: false, message: '更新会话状态失败' });
+  }
+};
+
+// 获取会话历史消息
+exports.getMessages = async (req, res) => {
+  try {
+    const { page, pageSize } = req.query;
+    const sessionId = req.params.id;
+
+    // 验证用户是否属于该会话
+    const [session] = await db.query(
+      'SELECT id FROM remote_sessions WHERE id = ? AND (elderly_user_id = ? OR assistant_user_id = ?)',
+      [sessionId, req.user.id, req.user.id]
+    );
+    if (session.length === 0) {
+      return res.status(404).json({ success: false, message: '会话不存在' });
+    }
+
+    const messages = await socketService.getSessionMessages(sessionId, {
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50,
+    });
+
+    res.json({ success: true, data: messages });
+  } catch (err) {
+    logger.error('GetMessages failed', { error: err.message });
+    res.status(500).json({ success: false, message: '获取消息失败' });
   }
 };

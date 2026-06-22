@@ -1,0 +1,86 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
+
+class FontSizeProvider extends ChangeNotifier {
+  String _fontSizeKey = 'large';
+  String _speechRate = 'slow';
+
+  String get fontSizeKey => _fontSizeKey;
+  String get speechRate => _speechRate;
+
+  double get scaleFactor {
+    switch (_fontSizeKey) {
+      case 'small':
+        return 0.8;
+      case 'medium':
+        return 0.9;
+      case 'large':
+        return 1.0;
+      case 'xlarge':
+        return 1.2;
+      default:
+        return 1.0;
+    }
+  }
+
+  /// 将基准字号按当前缩放比例返回实际字号
+  double scaled(double baseSize) => baseSize * scaleFactor;
+
+  /// 从本地缓存加载字体设置
+  Future<void> loadFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    _fontSizeKey = prefs.getString('font_size') ?? 'large';
+    _speechRate = prefs.getString('speech_rate') ?? 'slow';
+    notifyListeners();
+  }
+
+  /// 从服务端同步字体设置并更新本地缓存
+  Future<void> loadFromApi() async {
+    try {
+      final result = await ApiService.getProfile();
+      if (result['success'] == true && result['data'] != null) {
+        final key = result['data']['font_size']?.toString() ?? 'large';
+        _fontSizeKey = key;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('font_size', key);
+        notifyListeners();
+      }
+    } catch (_) {
+      // 网络失败时保持本地缓存值
+    }
+  }
+
+  /// 从服务端同步值到本地（不回写 API）
+  Future<void> setFromServer(String key) async {
+    _fontSizeKey = key;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('font_size', key);
+    notifyListeners();
+  }
+
+  /// 更新字体大小：保存到服务端 + 本地缓存 + 通知 UI 刷新
+  Future<bool> update(String key) async {
+    try {
+      final result = await ApiService.updateSettings(fontSize: key);
+      if (result['success'] == true) {
+        _fontSizeKey = key;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('font_size', key);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 更新播报语速：仅保存本地缓存
+  Future<void> updateSpeechRate(String rate) async {
+    _speechRate = rate;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('speech_rate', rate);
+    notifyListeners();
+  }
+}
