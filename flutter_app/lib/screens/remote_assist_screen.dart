@@ -8,6 +8,8 @@ import 'package:elder_smart_helper/services/api_service.dart';
 import 'package:elder_smart_helper/services/socket_service.dart';
 import 'package:elder_smart_helper/widgets/annotation_canvas.dart';
 import 'package:elder_smart_helper/utils/remote_assist_utils.dart';
+import 'package:elder_smart_helper/models/tutorial.dart';
+import 'package:elder_smart_helper/screens/tutorial_detail_screen.dart';
 
 class RemoteAssistScreen extends StatefulWidget {
   const RemoteAssistScreen({super.key});
@@ -24,6 +26,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   int? _activeSessionId;
   int? _currentUserId;
   final List<Map<String, dynamic>> _messages = [];
+  final List<Map<String, dynamic>> _guideMarks = [];
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _imagePicker = ImagePicker();
@@ -190,9 +193,56 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       }
     });
 
+    SocketService.onTutorial((data) {
+      if (!mounted) return;
+      final tutorial = data['tutorial'];
+      if (tutorial != null) {
+        setState(() {
+          _messages.add({
+            'type': 'tutorial',
+            'tutorial': tutorial,
+            'isMe': false,
+            'sender': data['sender'] ?? '对方',
+          });
+        });
+        _scrollToBottom();
+      }
+    });
+
+    SocketService.onGuideMark((data) {
+      if (!mounted) return;
+      final mark = data['mark'];
+      if (mark != null) {
+        setState(() {
+          _guideMarks.add({
+            'id': mark['id'],
+            'x': mark['x'],
+            'y': mark['y'],
+            'order': mark['order'],
+            'imageBase64': mark['imageBase64'],
+          });
+        });
+        // 显示引导覆盖层
+        _showGuideOverlay(mark['imageBase64']);
+      }
+    });
+
+    SocketService.onGuideConfirm((data) {
+      if (!mounted) return;
+      final markId = data['markId'];
+      setState(() {
+        _guideMarks.removeWhere((m) => m['id'] == markId);
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('对方已完成引导步骤')));
+    });
+
     SocketService.onSessionEnded((data) {
       if (!mounted) return;
-      setState(() => _activeSessionId = null);
+      setState(() {
+        _activeSessionId = null;
+        _guideMarks.clear();
+      });
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('协助会话已结束')));
     });
@@ -220,6 +270,181 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           .add({'type': 'text', 'text': text, 'isMe': true, 'sender': '我'});
     });
     _messageController.clear();
+    _scrollToBottom();
+  }
+
+  /// 显示教程选择弹窗
+  Future<void> _showTutorialPicker() async {
+    if (_activeSessionId == null) return;
+    try {
+      final result = await ApiService.getTutorials();
+      if (!mounted) return;
+      if (result['success'] != true || result['data'] == null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('加载教程失败')));
+        return;
+      }
+      final tutorials = (result['data'] as List)
+          .map((t) => Tutorial.fromJson(t))
+          .toList();
+
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) => DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (ctx, scrollController) => Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('选择教程',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: tutorials.length,
+                  itemBuilder: (ctx, index) {
+                    final t = tutorials[index];
+                    return ListTile(
+                      leading: const Icon(Icons.menu_book,
+                          color: Color(0xFF4A90E2)),
+                      title: Text(t.title),
+                      subtitle: Text(t.description,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _sendTutorial(t);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('加载教程失败: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('加载教程失败')));
+    }
+  }
+
+  /// 显示引导覆盖层（老人端收到标记后）
+  void _showGuideOverlay(String? imageBase64) {
+    if (imageBase64 == null || !mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Dialog(
+              insetPadding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text('家人正在引导您',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold)),
+                  ),
+                  Flexible(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return InteractiveViewer(
+                          child: SizedBox(
+                            width: constraints.maxWidth,
+                            height: constraints.maxWidth,
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: Image.memory(
+                                    base64Decode(imageBase64),
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                                ..._guideMarks.where((m) =>
+                                    m['imageBase64'] == imageBase64).map((mark) {
+                                  final x = (mark['x'] as num).toDouble();
+                                  final y = (mark['y'] as num).toDouble();
+                                  return Positioned(
+                                    left: x * constraints.maxWidth - 18,
+                                    top: y * constraints.maxWidth - 18,
+                                    child: _GuideMarkWidget(
+                                      order: mark['order'] ?? 1,
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('关闭'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            // 确认完成
+                            for (final mark in _guideMarks) {
+                              if (_activeSessionId != null) {
+                                SocketService.sendGuideConfirm(
+                                    _activeSessionId!, mark['id']);
+                              }
+                            }
+                            setState(() => _guideMarks.clear());
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('已确认完成')),
+                            );
+                          },
+                          child: const Text('确认完成'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _sendTutorial(Tutorial tutorial) {
+    if (_activeSessionId == null) return;
+    final tutorialData = {
+      'id': tutorial.id,
+      'title': tutorial.title,
+      'description': tutorial.description,
+    };
+    SocketService.sendTutorial(_activeSessionId!, tutorialData, '我');
+    setState(() {
+      _messages.add({
+        'type': 'tutorial',
+        'tutorial': tutorialData,
+        'isMe': true,
+        'sender': '我',
+      });
+    });
     _scrollToBottom();
   }
 
@@ -295,21 +520,50 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       MaterialPageRoute(
         builder: (_) => AnnotationCanvas(
           imageBytes: imageBytes,
-          onComplete: (annotatedBytes) {
+          onComplete: (annotatedBytes, {guideMarks}) {
             if (_activeSessionId == null) return;
             final annotatedBase64 = base64Encode(annotatedBytes);
-            SocketService.sendAnnotation(
-                _activeSessionId!, {'imageBase64': annotatedBase64});
-            if (mounted) {
-              setState(() {
-                _messages.add({
-                  'type': 'annotation',
+
+            // 如果有引导标记，发送引导标记事件
+            if (guideMarks != null && guideMarks.isNotEmpty) {
+              for (final mark in guideMarks) {
+                SocketService.sendGuideMark(_activeSessionId!, {
+                  'id': DateTime.now().millisecondsSinceEpoch + mark.order,
+                  'x': mark.ratioX,
+                  'y': mark.ratioY,
+                  'imageWidth': 1.0,
+                  'imageHeight': 1.0,
+                  'order': mark.order,
                   'imageBase64': annotatedBase64,
-                  'isMe': true,
-                  'sender': '我',
+                }, '我');
+              }
+              if (mounted) {
+                setState(() {
+                  _messages.add({
+                    'type': 'guide_sent',
+                    'imageBase64': annotatedBase64,
+                    'markCount': guideMarks.length,
+                    'isMe': true,
+                    'sender': '我',
+                  });
                 });
-              });
-              _scrollToBottom();
+                _scrollToBottom();
+              }
+            } else {
+              // 普通标注
+              SocketService.sendAnnotation(
+                  _activeSessionId!, {'imageBase64': annotatedBase64});
+              if (mounted) {
+                setState(() {
+                  _messages.add({
+                    'type': 'annotation',
+                    'imageBase64': annotatedBase64,
+                    'isMe': true,
+                    'sender': '我',
+                  });
+                });
+                _scrollToBottom();
+              }
             }
           },
         ),
@@ -324,6 +578,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       setState(() {
         _activeSessionId = null;
         _messages.clear();
+        _guideMarks.clear();
       });
     }
   }
@@ -668,6 +923,19 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _showTutorialPicker,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(Icons.menu_book,
+                        color: Color(0xFF4A90E2), size: 24),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _messageController,
@@ -706,6 +974,158 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     final isMe = msg['isMe'] as bool;
     final type = msg['type'] as String? ?? 'text';
 
+    Widget content;
+    if (type == 'text') {
+      content = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Text(
+          msg['text'] ?? '',
+          style: TextStyle(
+              fontSize: s(18),
+              color: isMe ? Colors.white : Colors.black87),
+        ),
+      );
+    } else if (type == 'tutorial') {
+      final tutorial = msg['tutorial'] as Map<String, dynamic>? ?? {};
+      content = GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TutorialDetailScreen(
+                tutorial: Tutorial(
+                  id: tutorial['id'] ?? 0,
+                  title: tutorial['title'] ?? '',
+                  description: tutorial['description'] ?? '',
+                  category: '',
+                  difficultyLevel: 'beginner',
+                  steps: [],
+                ),
+              ),
+            ),
+          );
+        },
+        child: Container(
+          width: 220,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.menu_book,
+                      size: 20,
+                      color: isMe ? Colors.white70 : const Color(0xFF4A90E2)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      tutorial['title'] ?? '',
+                      style: TextStyle(
+                        fontSize: s(16),
+                        fontWeight: FontWeight.bold,
+                        color: isMe ? Colors.white : Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                tutorial['description'] ?? '',
+                style: TextStyle(
+                  fontSize: s(14),
+                  color: isMe ? Colors.white70 : Colors.grey[600],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '点击查看教程 >',
+                style: TextStyle(
+                  fontSize: s(14),
+                  color: isMe ? Colors.white : const Color(0xFF4A90E2),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (type == 'guide_sent') {
+      final markCount = msg['markCount'] ?? 0;
+      content = Container(
+        width: 200,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Icon(Icons.touch_app, size: 32,
+                color: isMe ? Colors.white : const Color(0xFF4A90E2)),
+            const SizedBox(height: 8),
+            Text(
+              '已发送 $markCount 个引导标记',
+              style: TextStyle(
+                fontSize: s(16),
+                fontWeight: FontWeight.bold,
+                color: isMe ? Colors.white : Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '对方查看图片后将显示引导',
+              style: TextStyle(
+                fontSize: s(14),
+                color: isMe ? Colors.white70 : Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    } else {
+      // screenshot / annotation 类型
+      content = GestureDetector(
+        onTap: type == 'screenshot'
+            ? () => _openAnnotation(msg['imageBase64'])
+            : null,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Image.memory(
+              base64Decode(msg['imageBase64']),
+              width: 200,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: 200,
+                height: 120,
+                color: Colors.grey[300],
+                child: const Icon(Icons.broken_image, size: 40),
+              ),
+            ),
+            if (type == 'screenshot')
+              Positioned(
+                bottom: 4,
+                right: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('点击标注',
+                      style: TextStyle(
+                          color: Colors.white, fontSize: s(12))),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -718,56 +1138,80 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: type == 'text'
-              ? Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Text(
-                    msg['text'] ?? '',
-                    style: TextStyle(
-                        fontSize: s(18),
-                        color: isMe ? Colors.white : Colors.black87),
-                  ),
-                )
-              : GestureDetector(
-                  onTap: type == 'screenshot'
-                      ? () => _openAnnotation(msg['imageBase64'])
-                      : null,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Image.memory(
-                        base64Decode(msg['imageBase64']),
-                        width: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 200,
-                          height: 120,
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.broken_image, size: 40),
-                        ),
-                      ),
-                      if (type == 'screenshot')
-                        Positioned(
-                          bottom: 4,
-                          right: 4,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text('点击标注',
-                                style: TextStyle(
-                                    color: Colors.white, fontSize: s(12))),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+          child: content,
         ),
       ),
+    );
+  }
+}
+
+/// 引导标记脉冲动画组件
+class _GuideMarkWidget extends StatefulWidget {
+  final int order;
+
+  const _GuideMarkWidget({required this.order});
+
+  @override
+  State<_GuideMarkWidget> createState() => _GuideMarkWidgetState();
+}
+
+class _GuideMarkWidgetState extends State<_GuideMarkWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat();
+    _animation = Tween<double>(begin: 0.8, end: 1.4).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 36 * _animation.value,
+          height: 36 * _animation.value,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.red.withValues(alpha: 0.3),
+          ),
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.red,
+              ),
+              child: Center(
+                child: Text(
+                  '${widget.order}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

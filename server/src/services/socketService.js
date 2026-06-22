@@ -79,6 +79,25 @@ function initialize(server) {
       io.to(`session_${data.sessionId}`).emit('session_ended', data);
     });
 
+    // 发送教程卡片
+    socket.on('tutorial', (data) => {
+      socket.to(`session_${data.sessionId}`).emit('tutorial', data);
+      const tutorialData = data.tutorial ? JSON.stringify(data.tutorial) : null;
+      saveMessage(data.sessionId, userId, 'tutorial', tutorialData, null);
+    });
+
+    // 发送引导标记
+    socket.on('guide_mark', (data) => {
+      socket.to(`session_${data.sessionId}`).emit('guide_mark', data);
+      const markData = data.mark ? JSON.stringify(data.mark) : null;
+      saveMessage(data.sessionId, userId, 'guide_mark', markData, null);
+    });
+
+    // 确认引导完成
+    socket.on('guide_confirm', (data) => {
+      socket.to(`session_${data.sessionId}`).emit('guide_confirm', data);
+    });
+
     // 断开连接
     socket.on('disconnect', () => {
       if (userId) {

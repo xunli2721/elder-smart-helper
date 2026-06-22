@@ -7,7 +7,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 /// 标注工具类型
-enum AnnotationTool { pen, circle, arrow, text }
+enum AnnotationTool { pen, circle, arrow, text, guide }
+
+/// 引导标记数据
+class GuideMarkData {
+  final double ratioX; // 0.0~1.0 相对图片宽度
+  final double ratioY; // 0.0~1.0 相对图片高度
+  final int order;
+  final String? text;
+
+  const GuideMarkData({
+    required this.ratioX,
+    required this.ratioY,
+    required this.order,
+    this.text,
+  });
+}
 
 /// 单条标注数据
 class AnnotationItem {
@@ -27,7 +42,10 @@ class AnnotationItem {
 /// 标注画布组件
 class AnnotationCanvas extends StatefulWidget {
   final Uint8List imageBytes;
-  final Function(Uint8List annotatedImageBytes) onComplete;
+  final Function(
+    Uint8List annotatedImageBytes, {
+    List<GuideMarkData>? guideMarks,
+  }) onComplete;
 
   const AnnotationCanvas({
     super.key,
@@ -45,6 +63,7 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
   AnnotationTool _currentTool = AnnotationTool.pen;
   Color _currentColor = Colors.red;
   final List<AnnotationItem> _items = [];
+  final List<GuideMarkData> _guideMarks = [];
   List<Offset> _currentPoints = [];
   bool _isDrawing = false;
 
@@ -86,9 +105,32 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
       _showTextInput(details.localPosition);
       return;
     }
+    if (_currentTool == AnnotationTool.guide) {
+      _addGuideMark(details.localPosition);
+      return;
+    }
     setState(() {
       _isDrawing = true;
       _currentPoints = [details.localPosition];
+    });
+  }
+
+  void _addGuideMark(Offset position) {
+    if (_bgImage == null) return;
+    // 计算相对图片的比例坐标
+    final renderBox =
+        _repaintKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final size = renderBox.size;
+    final ratioX = (position.dx / size.width).clamp(0.0, 1.0);
+    final ratioY = (position.dy / size.height).clamp(0.0, 1.0);
+
+    setState(() {
+      _guideMarks.add(GuideMarkData(
+        ratioX: ratioX,
+        ratioY: ratioY,
+        order: _guideMarks.length + 1,
+      ));
     });
   }
 
@@ -166,7 +208,10 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
       ui.Image image = await boundary.toImage(pixelRatio: 2.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData != null) {
-        widget.onComplete(byteData.buffer.asUint8List());
+        widget.onComplete(
+          byteData.buffer.asUint8List(),
+          guideMarks: _guideMarks.isNotEmpty ? _guideMarks : null,
+        );
         if (mounted) {
           Navigator.pop(context);
         }
@@ -243,6 +288,7 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
                   painter: _AnnotationPainter(
                     image: _bgImage,
                     items: _items,
+                    guideMarks: _guideMarks,
                     currentPoints: _currentPoints,
                     currentTool: _currentTool,
                     currentColor: _currentColor,
@@ -277,6 +323,7 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
                 _toolButton(AnnotationTool.circle, Icons.circle_outlined, '圆形'),
                 _toolButton(AnnotationTool.arrow, Icons.arrow_right_alt, '箭头'),
                 _toolButton(AnnotationTool.text, Icons.text_fields, '文字'),
+                _toolButton(AnnotationTool.guide, Icons.touch_app, '标记'),
               ],
             ),
             const SizedBox(height: 8),
@@ -340,17 +387,17 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
 class _AnnotationPainter extends CustomPainter {
   final ui.Image? image;
   final List<AnnotationItem> items;
+  final List<GuideMarkData> guideMarks;
   final List<Offset> currentPoints;
   final AnnotationTool currentTool;
   final Color currentColor;
   final double scale;
   final Offset offset;
 
-
-
   _AnnotationPainter({
     required this.image,
     required this.items,
+    required this.guideMarks,
     required this.currentPoints,
     required this.currentTool,
     required this.currentColor,
@@ -380,6 +427,15 @@ class _AnnotationPainter extends CustomPainter {
       _drawItem(canvas, size, item);
     }
 
+    // 绘制引导标记
+    canvas.save();
+    canvas.translate(offset.dx, offset.dy);
+    canvas.scale(scale);
+    for (final mark in guideMarks) {
+      _drawGuideMark(canvas, size, mark);
+    }
+    canvas.restore();
+
     // 绘制当前正在画的标注
     if (currentPoints.isNotEmpty) {
       _drawCurrent(canvas, size);
@@ -406,6 +462,8 @@ class _AnnotationPainter extends CustomPainter {
       case AnnotationTool.arrow:
         _drawArrow(canvas, item.points, paint);
         break;
+      case AnnotationTool.guide:
+        break; // 引导标记单独绘制
       case AnnotationTool.text:
         _drawText(canvas, item.points.first, item.text ?? '', item.color);
         break;
@@ -506,9 +564,51 @@ class _AnnotationPainter extends CustomPainter {
     textPainter.paint(canvas, position);
   }
 
+  void _drawGuideMark(Canvas canvas, Size size, GuideMarkData mark) {
+    final x = mark.ratioX * size.width;
+    final y = mark.ratioY * size.height;
+    final center = Offset(x, y);
+
+    // 外圈脉冲效果（半透明大圆）
+    canvas.drawCircle(center, 28, Paint()
+      ..color = Colors.red.withValues(alpha: 0.2)
+      ..style = PaintingStyle.fill);
+
+    // 内圈
+    canvas.drawCircle(center, 18, Paint()
+      ..color = Colors.red
+      ..style = PaintingStyle.fill);
+
+    // 边框
+    canvas.drawCircle(center, 18, Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2);
+
+    // 序号文字
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '${mark.order}',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(center.dx - textPainter.width / 2,
+          center.dy - textPainter.height / 2),
+    );
+  }
+
   @override
   bool shouldRepaint(covariant _AnnotationPainter oldDelegate) {
     return oldDelegate.items.length != items.length ||
+        oldDelegate.guideMarks.length != guideMarks.length ||
         oldDelegate.currentPoints.length != currentPoints.length ||
         oldDelegate.scale != scale ||
         oldDelegate.offset != offset ||

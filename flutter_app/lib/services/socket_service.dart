@@ -95,6 +95,40 @@ class SocketService {
     });
   }
 
+  static void sendTutorial(
+    int sessionId,
+    Map<String, dynamic> tutorial,
+    String sender,
+  ) {
+    _socket?.emit('tutorial', {
+      'sessionId': sessionId,
+      'tutorial': tutorial,
+      'sender': sender,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static void sendGuideMark(
+    int sessionId,
+    Map<String, dynamic> mark,
+    String sender,
+  ) {
+    _socket?.emit('guide_mark', {
+      'sessionId': sessionId,
+      'mark': mark,
+      'sender': sender,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static void sendGuideConfirm(int sessionId, int markId) {
+    _socket?.emit('guide_confirm', {
+      'sessionId': sessionId,
+      'markId': markId,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
   static void sendMessage(int sessionId, String message, String sender) {
     _socket?.emit('message', {
       'sessionId': sessionId,
@@ -125,6 +159,18 @@ class SocketService {
     _socket?.on('session_ended', callback);
   }
 
+  static void onTutorial(Function(dynamic) callback) {
+    _socket?.on('tutorial', callback);
+  }
+
+  static void onGuideMark(Function(dynamic) callback) {
+    _socket?.on('guide_mark', callback);
+  }
+
+  static void onGuideConfirm(Function(dynamic) callback) {
+    _socket?.on('guide_confirm', callback);
+  }
+
   static void offMessage() {
     _socket?.off('message');
   }
@@ -141,11 +187,26 @@ class SocketService {
     _socket?.off('session_ended');
   }
 
+  static void offTutorial() {
+    _socket?.off('tutorial');
+  }
+
+  static void offGuideMark() {
+    _socket?.off('guide_mark');
+  }
+
+  static void offGuideConfirm() {
+    _socket?.off('guide_confirm');
+  }
+
   static void removeAllListeners() {
     offMessage();
     offScreenshot();
     offAnnotation();
     offSessionEnded();
+    offTutorial();
+    offGuideMark();
+    offGuideConfirm();
   }
 
   static void disconnect() {
