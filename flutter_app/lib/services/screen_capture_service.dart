@@ -113,8 +113,10 @@ class ScreenCaptureService {
   }
 
   static void _startListening() {
-    _frameController ??= StreamController<ScreenFrame>.broadcast();
     _frameSubscription?.cancel();
+    _frameSubscription = null;
+    _frameController?.close();
+    _frameController = StreamController<ScreenFrame>.broadcast();
     _frameSubscription =
         _frameEventChannel.receiveBroadcastStream().listen((event) {
       if (event is Map) {

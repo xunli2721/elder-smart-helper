@@ -31,6 +31,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   bool _isSharingScreen = false;
   bool _isViewingScreen = false;
   String? _currentScreenFrame;
+  int _remoteScreenWidth = 720;
+  int _remoteScreenHeight = 1280;
   StreamSubscription? _frameSubscription;
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
@@ -204,6 +206,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       if (image != null && image.isNotEmpty) {
         setState(() {
           _currentScreenFrame = image;
+          _remoteScreenWidth = data['width'] ?? 720;
+          _remoteScreenHeight = data['height'] ?? 1280;
           _isViewingScreen = true;
         });
       }
@@ -492,19 +496,44 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     );
   }
 
-  /// 在共享的屏幕上标注
-  void _markOnSharedScreen(Offset position, Size imageSize) {
+  /// 在共享的屏幕上标注（考虑 BoxFit.contain 的 letterbox 偏移）
+  void _markOnSharedScreen(
+    Offset tapPosition,
+    Size containerSize,
+    Size imageActualSize,
+  ) {
     if (_activeSessionId == null) return;
-    final ratioX = (position.dx / imageSize.width).clamp(0.0, 1.0);
-    final ratioY = (position.dy / imageSize.height).clamp(0.0, 1.0);
+
+    // 计算 BoxFit.contain 后图片的实际显示区域
+    final imageAspect = imageActualSize.width / imageActualSize.height;
+    final containerAspect = containerSize.width / containerSize.height;
+
+    double displayWidth, displayHeight, offsetX, offsetY;
+    if (imageAspect > containerAspect) {
+      // 图片更宽，左右填满，上下有 letterbox
+      displayWidth = containerSize.width;
+      displayHeight = containerSize.width / imageAspect;
+      offsetX = 0;
+      offsetY = (containerSize.height - displayHeight) / 2;
+    } else {
+      // 图片更高，上下填满，左右有 letterbox
+      displayHeight = containerSize.height;
+      displayWidth = containerSize.height * imageAspect;
+      offsetX = (containerSize.width - displayWidth) / 2;
+      offsetY = 0;
+    }
+
+    // 将点击位置转换为图片内的比例坐标
+    final ratioX =
+        ((tapPosition.dx - offsetX) / displayWidth).clamp(0.0, 1.0);
+    final ratioY =
+        ((tapPosition.dy - offsetY) / displayHeight).clamp(0.0, 1.0);
 
     final markId = DateTime.now().millisecondsSinceEpoch;
     SocketService.sendGuideMark(_activeSessionId!, {
       'id': markId,
       'x': ratioX,
       'y': ratioY,
-      'imageWidth': 1.0,
-      'imageHeight': 1.0,
       'order': _guideMarks.length + 1,
       'imageBase64': _currentScreenFrame,
     }, '我');
@@ -680,6 +709,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         _isSharingScreen = false;
         _isViewingScreen = false;
         _currentScreenFrame = null;
+        _remoteScreenWidth = 720;
+        _remoteScreenHeight = 1280;
       });
     }
   }
@@ -1097,9 +1128,30 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           builder: (context, constraints) {
             final w = constraints.maxWidth;
             final h = constraints.maxHeight;
+            // 计算 BoxFit.contain 后图片的实际显示区域
+            final imgW = _remoteScreenWidth.toDouble();
+            final imgH = _remoteScreenHeight.toDouble();
+            final imgAspect = imgW / imgH;
+            final containerAspect = w / h;
+            double displayW, displayH, offX, offY;
+            if (imgAspect > containerAspect) {
+              displayW = w;
+              displayH = w / imgAspect;
+              offX = 0;
+              offY = (h - displayH) / 2;
+            } else {
+              displayH = h;
+              displayW = h * imgAspect;
+              offX = (w - displayW) / 2;
+              offY = 0;
+            }
             return GestureDetector(
               onTapUp: (details) {
-                _markOnSharedScreen(details.localPosition, Size(w, h));
+                _markOnSharedScreen(
+                  details.localPosition,
+                  Size(w, h),
+                  Size(imgW, imgH),
+                );
               },
               child: Stack(
                 children: [
@@ -1118,8 +1170,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                     final x = (mark['x'] as num).toDouble();
                     final y = (mark['y'] as num).toDouble();
                     return Positioned(
-                      left: x * w - 14,
-                      top: y * h - 14,
+                      left: offX + x * displayW - 14,
+                      top: offY + y * displayH - 14,
                       child: Container(
                         width: 28,
                         height: 28,

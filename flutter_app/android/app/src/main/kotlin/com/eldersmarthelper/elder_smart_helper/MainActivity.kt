@@ -20,7 +20,7 @@ class MainActivity : FlutterActivity() {
     private val FRAME_EVENT_CHANNEL = "com.eldersmarthelper/screen_frames"
 
     private var frameEventSink: EventChannel.EventSink? = null
-    private var pendingCaptureResult: Pair<Int, Intent>? = null
+    private var pendingMethodResult: MethodChannel.Result? = null
 
     companion object {
         private const val REQUEST_MEDIA_PROJECTION = 1001
@@ -35,8 +35,9 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "startCapture" -> {
+                        pendingMethodResult?.success(false)
+                        pendingMethodResult = result
                         requestScreenCapture()
-                        result.success(true)
                     }
                     "stopCapture" -> {
                         stopScreenCapture()
@@ -162,18 +163,24 @@ class MainActivity : FlutterActivity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_MEDIA_PROJECTION && resultCode == Activity.RESULT_OK && data != null) {
-            // 启动前台录屏服务
-            val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
-                action = ScreenCaptureService.ACTION_START
-                putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
-                putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
+        if (requestCode == REQUEST_MEDIA_PROJECTION) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                // 启动前台录屏服务
+                val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
+                    action = ScreenCaptureService.ACTION_START
+                    putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
+                    putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                pendingMethodResult?.success(true)
             } else {
-                startService(serviceIntent)
+                pendingMethodResult?.success(false)
             }
+            pendingMethodResult = null
         }
     }
 }

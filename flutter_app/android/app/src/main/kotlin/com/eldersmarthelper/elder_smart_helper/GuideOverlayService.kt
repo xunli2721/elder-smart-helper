@@ -1,6 +1,9 @@
 package com.eldersmarthelper.elder_smart_helper
 
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -24,6 +27,8 @@ class GuideOverlayService : Service() {
         const val ACTION_SHOW = "ACTION_SHOW"
         const val ACTION_HIDE = "ACTION_HIDE"
         const val EXTRA_MARKS = "marks_json"
+        private const val CHANNEL_ID = "guide_overlay"
+        private const val NOTIFICATION_ID = 1002
 
         var overlayVisible = false
         var confirmCallback: (() -> Unit)? = null
@@ -33,6 +38,12 @@ class GuideOverlayService : Service() {
     private var overlayView: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, createNotification())
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -192,6 +203,26 @@ class GuideOverlayService : Service() {
             e.printStackTrace()
         }
         return marks
+    }
+
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "引导悬浮窗",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "远程协助引导标记"
+        }
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun createNotification(): Notification {
+        return Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle("远程协助")
+            .setContentText("引导标记显示中...")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .build()
     }
 
     override fun onDestroy() {
