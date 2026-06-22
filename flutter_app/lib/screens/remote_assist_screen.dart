@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:elder_smart_helper/providers/font_size_provider.dart';
 import 'package:elder_smart_helper/services/api_service.dart';
 import 'package:elder_smart_helper/services/socket_service.dart';
+import 'package:elder_smart_helper/services/screen_capture_service.dart';
 import 'package:elder_smart_helper/widgets/annotation_canvas.dart';
 import 'package:elder_smart_helper/utils/remote_assist_utils.dart';
 import 'package:elder_smart_helper/models/tutorial.dart';
@@ -27,6 +28,9 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   int? _currentUserId;
   final List<Map<String, dynamic>> _messages = [];
   final List<Map<String, dynamic>> _guideMarks = [];
+  bool _isSharingScreen = false;
+  bool _isViewingScreen = false;
+  String? _currentScreenFrame;
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _imagePicker = ImagePicker();
@@ -190,6 +194,17 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
           });
         });
         _scrollToBottom();
+      }
+    });
+
+    SocketService.onScreenFrame((data) {
+      if (!mounted) return;
+      final image = data['image'] as String?;
+      if (image != null && image.isNotEmpty) {
+        setState(() {
+          _currentScreenFrame = image;
+          _isViewingScreen = true;
+        });
       }
     });
 
@@ -429,6 +444,81 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     );
   }
 
+  /// 开始屏幕共享
+  Future<void> _startScreenShare() async {
+    if (_activeSessionId == null) return;
+    try {
+      final started = await ScreenCaptureService.startCapture();
+      if (!started) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法开始屏幕共享，请授权屏幕录制权限')),
+        );
+        return;
+      }
+      setState(() => _isSharingScreen = true);
+
+      // 监听屏幕帧并通过 Socket 发送
+      ScreenCaptureService.frameStream?.listen((frame) {
+        if (_activeSessionId != null && _isSharingScreen) {
+          SocketService.sendScreenFrame(
+            _activeSessionId!,
+            frame.imageBase64,
+            frame.width,
+            frame.height,
+          );
+        }
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('屏幕共享已开始')),
+      );
+    } catch (e) {
+      debugPrint('startScreenShare error: $e');
+    }
+  }
+
+  /// 停止屏幕共享
+  Future<void> _stopScreenShare() async {
+    await ScreenCaptureService.stopCapture();
+    setState(() => _isSharingScreen = false);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('屏幕共享已停止')),
+    );
+  }
+
+  /// 在共享的屏幕上标注
+  void _markOnSharedScreen(Offset position, Size imageSize) {
+    if (_activeSessionId == null) return;
+    final ratioX = (position.dx / imageSize.width).clamp(0.0, 1.0);
+    final ratioY = (position.dy / imageSize.height).clamp(0.0, 1.0);
+
+    final markId = DateTime.now().millisecondsSinceEpoch;
+    SocketService.sendGuideMark(_activeSessionId!, {
+      'id': markId,
+      'x': ratioX,
+      'y': ratioY,
+      'imageWidth': 1.0,
+      'imageHeight': 1.0,
+      'order': _guideMarks.length + 1,
+      'imageBase64': _currentScreenFrame,
+    }, '我');
+
+    if (mounted) {
+      setState(() {
+        _guideMarks.add({
+          'id': markId,
+          'x': ratioX,
+          'y': ratioY,
+          'order': _guideMarks.length + 1,
+          'imageBase64': _currentScreenFrame,
+        });
+      });
+    }
+  }
+
   void _sendTutorial(Tutorial tutorial) {
     if (_activeSessionId == null) return;
     final tutorialData = {
@@ -575,10 +665,16 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     if (_activeSessionId != null) {
       SocketService.endSession(_activeSessionId!);
       SocketService.removeAllListeners();
+      if (_isSharingScreen) {
+        ScreenCaptureService.stopCapture();
+      }
       setState(() {
         _activeSessionId = null;
         _messages.clear();
         _guideMarks.clear();
+        _isSharingScreen = false;
+        _isViewingScreen = false;
+        _currentScreenFrame = null;
       });
     }
   }
@@ -846,8 +942,17 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
     final s = context.read<FontSizeProvider>().scaled;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('远程协助中'),
+        title: Text(_isSharingScreen ? '正在共享屏幕' : '远程协助中'),
         actions: [
+          // 屏幕共享按钮
+          IconButton(
+            icon: Icon(
+              _isSharingScreen ? Icons.stop_screen_share : Icons.screen_share,
+              color: Colors.white,
+            ),
+            tooltip: _isSharingScreen ? '停止共享' : '共享屏幕',
+            onPressed: _isSharingScreen ? _stopScreenShare : _startScreenShare,
+          ),
           TextButton(
             onPressed: () {
               showDialog(
@@ -877,6 +982,9 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       ),
       body: Column(
         children: [
+          // 共享屏幕显示区域（家人端查看老人屏幕）
+          if (_isViewingScreen && _currentScreenFrame != null)
+            _buildSharedScreenView(),
           // 消息列表
           Expanded(
             child: _messages.isEmpty
@@ -965,6 +1073,95 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 共享屏幕视图（家人端查看并标注）
+  Widget _buildSharedScreenView() {
+    return Container(
+      height: 280,
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFF4A90E2), width: 2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: GestureDetector(
+          onTapUp: (details) {
+            // 在共享屏幕上点击标记位置
+            final box = context.findRenderObject() as RenderBox?;
+            if (box == null) return;
+            _markOnSharedScreen(details.localPosition, const Size(360, 640));
+          },
+          child: Stack(
+            children: [
+              // 屏幕帧图片
+              Positioned.fill(
+                child: Image.memory(
+                  base64Decode(_currentScreenFrame!),
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.grey[300],
+                    child: const Center(child: Text('屏幕加载中...')),
+                  ),
+                ),
+              ),
+              // 标记覆盖层
+              ..._guideMarks.map((mark) {
+                final x = (mark['x'] as num).toDouble();
+                final y = (mark['y'] as num).toDouble();
+                return Positioned(
+                  left: x * 360 - 14,
+                  top: y * 640 - 14,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.red,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${mark['order']}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              // 顶部状态栏
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  color: Colors.black54,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.circle, color: Colors.red, size: 8),
+                      const SizedBox(width: 4),
+                      Text(
+                        '对方屏幕共享中 · 点击标记位置',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: MediaQuery.of(context).size.width < 400 ? 10 : 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

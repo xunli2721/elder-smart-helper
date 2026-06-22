@@ -129,6 +129,24 @@ class SocketService {
     });
   }
 
+  static void sendScreenFrame(int sessionId, String imageBase64, int width, int height) {
+    _socket?.emit('screen_frame', {
+      'sessionId': sessionId,
+      'image': imageBase64,
+      'width': width,
+      'height': height,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static void onScreenFrame(Function(dynamic) callback) {
+    _socket?.on('screen_frame', callback);
+  }
+
+  static void offScreenFrame() {
+    _socket?.off('screen_frame');
+  }
+
   static void sendMessage(int sessionId, String message, String sender) {
     _socket?.emit('message', {
       'sessionId': sessionId,
@@ -207,6 +225,7 @@ class SocketService {
     offTutorial();
     offGuideMark();
     offGuideConfirm();
+    offScreenFrame();
   }
 
   static void disconnect() {

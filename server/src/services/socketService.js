@@ -98,6 +98,11 @@ function initialize(server) {
       socket.to(`session_${data.sessionId}`).emit('guide_confirm', data);
     });
 
+    // 屏幕共享帧
+    socket.on('screen_frame', (data) => {
+      socket.to(`session_${data.sessionId}`).emit('screen_frame', data);
+    });
+
     // 断开连接
     socket.on('disconnect', () => {
       if (userId) {
