@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +31,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   bool _isSharingScreen = false;
   bool _isViewingScreen = false;
   String? _currentScreenFrame;
+  StreamSubscription? _frameSubscription;
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _imagePicker = ImagePicker();
@@ -459,7 +460,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       setState(() => _isSharingScreen = true);
 
       // 监听屏幕帧并通过 Socket 发送
-      ScreenCaptureService.frameStream?.listen((frame) {
+      _frameSubscription = ScreenCaptureService.frameStream?.listen((frame) {
         if (_activeSessionId != null && _isSharingScreen) {
           SocketService.sendScreenFrame(
             _activeSessionId!,
@@ -481,6 +482,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
 
   /// 停止屏幕共享
   Future<void> _stopScreenShare() async {
+    _frameSubscription?.cancel();
+    _frameSubscription = null;
     await ScreenCaptureService.stopCapture();
     setState(() => _isSharingScreen = false);
     if (!mounted) return;
@@ -666,6 +669,8 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       SocketService.endSession(_activeSessionId!);
       SocketService.removeAllListeners();
       if (_isSharingScreen) {
+        _frameSubscription?.cancel();
+        _frameSubscription = null;
         ScreenCaptureService.stopCapture();
       }
       setState(() {
@@ -1088,79 +1093,79 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: GestureDetector(
-          onTapUp: (details) {
-            // 在共享屏幕上点击标记位置
-            final box = context.findRenderObject() as RenderBox?;
-            if (box == null) return;
-            _markOnSharedScreen(details.localPosition, const Size(360, 640));
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final h = constraints.maxHeight;
+            return GestureDetector(
+              onTapUp: (details) {
+                _markOnSharedScreen(details.localPosition, Size(w, h));
+              },
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Image.memory(
+                      base64Decode(_currentScreenFrame!),
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.grey[300],
+                        child: const Center(child: Text('屏幕加载中...')),
+                      ),
+                    ),
+                  ),
+                  ..._guideMarks.map((mark) {
+                    final x = (mark['x'] as num).toDouble();
+                    final y = (mark['y'] as num).toDouble();
+                    return Positioned(
+                      left: x * w - 14,
+                      top: y * h - 14,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.red,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${mark['order']}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                      color: Colors.black54,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.circle, color: Colors.red, size: 8),
+                          const SizedBox(width: 4),
+                          Text(
+                            '对方屏幕共享中 · 点击标记位置',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: w < 400 ? 10 : 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
           },
-          child: Stack(
-            children: [
-              // 屏幕帧图片
-              Positioned.fill(
-                child: Image.memory(
-                  base64Decode(_currentScreenFrame!),
-                  fit: BoxFit.contain,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey[300],
-                    child: const Center(child: Text('屏幕加载中...')),
-                  ),
-                ),
-              ),
-              // 标记覆盖层
-              ..._guideMarks.map((mark) {
-                final x = (mark['x'] as num).toDouble();
-                final y = (mark['y'] as num).toDouble();
-                return Positioned(
-                  left: x * 360 - 14,
-                  top: y * 640 - 14,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.red,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${mark['order']}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-              // 顶部状态栏
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                  color: Colors.black54,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.circle, color: Colors.red, size: 8),
-                      const SizedBox(width: 4),
-                      Text(
-                        '对方屏幕共享中 · 点击标记位置',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: MediaQuery.of(context).size.width < 400 ? 10 : 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

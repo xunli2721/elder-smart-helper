@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -68,7 +66,6 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
   bool _isDrawing = false;
 
   // 文字输入
-  Offset? _textPosition;
   final _textController = TextEditingController();
 
   // 缩放/平移
