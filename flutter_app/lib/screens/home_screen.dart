@@ -1,10 +1,13 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import '../providers/font_size_provider.dart';
 import '../services/api_service.dart';
 import '../models/tutorial.dart';
@@ -70,14 +73,42 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // 以下功能依赖第三方 App，使用 url_launcher
-      final uri = switch (label) {
-        '地铁' => Uri.parse('alipays://platformapi/startapp?appId=20000174'),
-        '支付宝缴费' => Uri.parse('alipays://platformapi/startapp?appId=20000178'),
-        _ => null,
-      };
+      // 天气：打开手机自带天气 App
+      if (label == '天气') {
+        if (Platform.isAndroid) {
+          final weatherPackages = [
+            'com.honor.weather',                // 荣耀天气
+            'com.huawei.android.totemweather',  // 华为天气
+            'com.miui.weather2',                // 小米天气
+            'com.coloros.weather2',             // OPPO 天气
+            'com.sec.android.daemonapp',        // 三星天气
+            'com.transsion.weather',            // 传音天气
+            'com.google.android.apps.weather',  // Google 天气
+          ];
+          for (final package in weatherPackages) {
+            final packageUri = Uri.parse('package:$package');
+            if (await canLaunchUrl(packageUri)) {
+              final intent = AndroidIntent(
+                action: 'android.intent.action.MAIN',
+                package: package,
+                flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+              );
+              await intent.launch();
+              return;
+            }
+          }
+        }
+        // 备选：打开中国天气网
+        final uri = Uri.parse('http://www.weather.com.cn');
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+        return;
+      }
 
-      if (uri != null) {
+      // 支付宝缴费
+      if (label == '支付宝缴费') {
+        final uri = Uri.parse('alipays://platformapi/startapp?appId=20000178');
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
@@ -86,6 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SnackBar(content: Text('请先安装「支付宝」后再使用此功能')),
           );
         }
+        return;
       }
     } catch (e) {
       if (!mounted) return;
@@ -109,10 +141,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final status = await Permission.contacts.request();
     if (status.isGranted) {
       final contact = await FlutterContacts.openExternalPick();
-      if (contact != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已选择联系人: ${contact.displayName}')),
+      if (contact == null || !mounted) return;
+      // Android Intent 打开联系人详情页（可看通话记录）
+      if (Platform.isAndroid) {
+        final intent = AndroidIntent(
+          action: 'android.intent.action.VIEW',
+          data:
+              'content://com.android.contacts/contacts/${contact.id}',
+          flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
         );
+        await intent.launch();
       }
     } else if (status.isPermanentlyDenied) {
       if (!mounted) return;
@@ -341,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisSpacing: 12,
               children: [
                 _quickAccess(Icons.qr_code_scanner, '扫码'),
-                _quickAccess(Icons.subway, '地铁'),
+                _quickAccess(Icons.wb_sunny, '天气'),
                 _quickAccess(Icons.payment, '支付宝缴费'),
                 _quickAccess(Icons.phone, '打电话'),
                 _quickAccess(Icons.contacts, '通讯录'),

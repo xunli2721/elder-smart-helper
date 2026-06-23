@@ -9,6 +9,8 @@ let io;
 
 // 存储在线用户 { userId: socketId }
 const onlineUsers = new Map();
+// 存储用户加入的会话 { userId: Set<sessionId> }
+const userSessions = new Map();
 
 function initialize(server) {
   io = new Server(server, {
@@ -49,9 +51,14 @@ function initialize(server) {
 
     // 加入会话房间（校验用户是否属于该会话）
     socket.on('join_session', async (sessionId) => {
-      // 简单校验：将 socket 加入房间
-      // 完整校验需要查询 remote_sessions 表确认用户是参与者
       socket.join(`session_${sessionId}`);
+      // 记录用户加入的会话
+      if (userId) {
+        if (!userSessions.has(String(userId))) {
+          userSessions.set(String(userId), new Set());
+        }
+        userSessions.get(String(userId)).add(String(sessionId));
+      }
       logger.debug('User joined session', { socketId: socket.id, userId, sessionId });
     });
 
@@ -75,8 +82,25 @@ function initialize(server) {
     });
 
     // 结束会话
-    socket.on('end_session', (data) => {
+    socket.on('end_session', async (data) => {
       io.to(`session_${data.sessionId}`).emit('session_ended', data);
+      // 更新数据库状态
+      try {
+        await db.query(
+          `UPDATE remote_sessions SET status = 'completed', ended_at = NOW()
+           WHERE id = ? AND status IN ('requested', 'active')`,
+          [data.sessionId]
+        );
+      } catch (err) {
+        logger.error('Failed to update session on end', { error: err.message });
+      }
+      // 清理会话记录
+      if (userId) {
+        const sessions = userSessions.get(String(userId));
+        if (sessions) {
+          sessions.delete(String(data.sessionId));
+        }
+      }
     });
 
     // 发送教程卡片
@@ -104,11 +128,35 @@ function initialize(server) {
     });
 
     // 断开连接
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       if (userId) {
         // 仅当当前 socketId 匹配时才删除（同一用户可能多设备连接）
         if (onlineUsers.get(String(userId)) === socket.id) {
           onlineUsers.delete(String(userId));
+        }
+
+        // 自动关闭该用户的所有进行中会话
+        const sessions = userSessions.get(String(userId));
+        if (sessions && sessions.size > 0) {
+          for (const sessionId of sessions) {
+            try {
+              // 将会话状态更新为 completed
+              await db.query(
+                `UPDATE remote_sessions SET status = 'completed', ended_at = NOW()
+                 WHERE id = ? AND status = 'active'`,
+                [sessionId]
+              );
+              // 通知房间内其他用户
+              io.to(`session_${sessionId}`).emit('session_ended', {
+                sessionId: parseInt(sessionId),
+                reason: 'disconnected',
+              });
+              logger.info('Auto-closed session on disconnect', { userId, sessionId });
+            } catch (err) {
+              logger.error('Failed to auto-close session', { error: err.message, sessionId });
+            }
+          }
+          userSessions.delete(String(userId));
         }
       }
       logger.info('Client disconnected', { socketId: socket.id, userId });
