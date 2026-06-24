@@ -4,18 +4,19 @@ const dotenv = require('dotenv');
 const http = require('http');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
+const logger = require('./utils/logger');
 
 dotenv.config();
 
 // 启动时校验关键环境变量（仅在直接运行时检查，测试环境由 jest 设置）
 if (!process.env.JWT_SECRET && require.main === module) {
-  console.error('FATAL ERROR: JWT_SECRET is not defined in environment variables.');
-  console.error('Please set JWT_SECRET in your .env file.');
+  logger.error('FATAL ERROR: JWT_SECRET is not defined in environment variables.');
+  logger.error('Please set JWT_SECRET in your .env file.');
   process.exit(1);
 }
 
-// 测试环境下设置默认 JWT_SECRET（如果 .env 未加载）
-if (!process.env.JWT_SECRET) {
+// 仅测试环境下设置默认 JWT_SECRET
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'test') {
   process.env.JWT_SECRET = 'test_jwt_secret_for_testing';
 }
 
@@ -111,9 +112,14 @@ app.use('/api/tutorials', tutorialRoutes);
 app.use('/api/remote', verifyToken, rateLimit({ windowMs: 15 * 60 * 1000, max: 60 }), remoteRoutes);
 app.use('/api/security', verifyToken, securityRoutes);
 
+// 404 处理
+app.use('*', (req, res) => {
+  res.status(404).json({ success: false, message: '接口不存在' });
+});
+
 // 全局错误处理中间件
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
+  logger.error('Unhandled error', { error: err.message });
   res.status(500).json({ success: false, message: '服务器内部错误' });
 });
 
@@ -121,9 +127,9 @@ app.use((err, req, res, next) => {
 if (require.main === module) {
   socketService.initialize(server);
   server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    logger.info(`Server running on http://localhost:${PORT}`);
     const origins = corsOptions.origin === true ? '*' : (Array.isArray(corsOptions.origin) ? corsOptions.origin.join(', ') : corsOptions.origin);
-    console.log(`CORS allowed origins: ${origins}`);
+    logger.info(`CORS allowed origins: ${origins}`);
   });
 }
 

@@ -2,6 +2,7 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const { JWT_SECRET } = require('../middleware/auth');
+const logger = require('../utils/logger');
 
 // 注册
 exports.register = async (req, res) => {
@@ -48,7 +49,7 @@ exports.register = async (req, res) => {
     const token = jwt.sign({ id: result.insertId, phone, user_type }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ success: true, data: { token, user: { id: result.insertId, phone, name: name.trim(), user_type } } });
   } catch (err) {
-    console.error('Register error:', err);
+    logger.error('Register error', { error: err.message });
     res.status(500).json({ success: false, message: '注册失败' });
   }
 };
@@ -81,7 +82,7 @@ exports.login = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Login error:', err);
+    logger.error('Login error', { error: err.message });
     res.status(500).json({ success: false, message: '登录失败' });
   }
 };
@@ -95,7 +96,7 @@ exports.getProfile = async (req, res) => {
     }
     res.json({ success: true, data: users[0] });
   } catch (err) {
-    console.error('GetProfile error:', err);
+    logger.error('GetProfile error', { error: err.message });
     res.status(500).json({ success: false, message: '获取信息失败' });
   }
 };

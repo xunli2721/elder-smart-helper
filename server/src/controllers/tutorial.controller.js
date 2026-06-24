@@ -1,4 +1,5 @@
 ﻿const db = require('../config/db');
+const logger = require('../utils/logger');
 
 // 获取教程列表（支持分页）
 exports.getAll = async (req, res) => {
@@ -56,7 +57,7 @@ exports.getAll = async (req, res) => {
 
     res.json({ success: true, data: result });
   } catch (err) {
-    console.error('GetTutorials error:', err);
+    logger.error('GetTutorials error', { error: err.message });
     res.status(500).json({ success: false, message: '获取教程失败' });
   }
 };
@@ -77,7 +78,7 @@ exports.getById = async (req, res) => {
 
     res.json({ success: true, data: tutorial });
   } catch (err) {
-    console.error('GetTutorial error:', err);
+    logger.error('GetTutorial error', { error: err.message });
     res.status(500).json({ success: false, message: '获取教程失败' });
   }
 };
@@ -97,7 +98,7 @@ exports.create = async (req, res) => {
 
     res.json({ success: true, data: { id: result.insertId } });
   } catch (err) {
-    console.error('CreateTutorial error:', err);
+    logger.error('CreateTutorial error', { error: err.message });
     res.status(500).json({ success: false, message: '创建教程失败' });
   }
 };
@@ -106,9 +107,19 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const { title, description, category, difficulty_level, image_url, steps } = req.body;
+
+    // 输入校验
+    if (!title || !category || !steps) {
+      return res.status(400).json({ success: false, message: '标题、分类和步骤不能为空' });
+    }
+    const validLevels = ['beginner', 'intermediate', 'advanced'];
+    if (difficulty_level && !validLevels.includes(difficulty_level)) {
+      return res.status(400).json({ success: false, message: '难度级别无效' });
+    }
+
     const [result] = await db.query(
       'UPDATE tutorials SET title=?, description=?, category=?, difficulty_level=?, image_url=?, steps=? WHERE id=? AND is_active = 1',
-      [title, description, category, difficulty_level, image_url, JSON.stringify(steps), req.params.id]
+      [title, description || '', category, difficulty_level || 'beginner', image_url || '', JSON.stringify(steps), req.params.id]
     );
 
     if (result.affectedRows === 0) {
@@ -117,7 +128,7 @@ exports.update = async (req, res) => {
 
     res.json({ success: true, message: '更新成功' });
   } catch (err) {
-    console.error('UpdateTutorial error:', err);
+    logger.error('UpdateTutorial error', { error: err.message });
     res.status(500).json({ success: false, message: '更新教程失败' });
   }
 };
@@ -134,7 +145,7 @@ exports.remove = async (req, res) => {
     }
     res.json({ success: true, message: '删除成功' });
   } catch (err) {
-    console.error('DeleteTutorial error:', err);
+    logger.error('DeleteTutorial error', { error: err.message });
     res.status(500).json({ success: false, message: '删除教程失败' });
   }
 };

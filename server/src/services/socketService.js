@@ -12,10 +12,27 @@ const onlineUsers = new Map();
 // 存储用户加入的会话 { userId: Set<sessionId> }
 const userSessions = new Map();
 
+// 校验用户是否属于该会话
+async function isSessionMember(userId, sessionId) {
+  try {
+    const [rows] = await db.query(
+      'SELECT id FROM remote_sessions WHERE id = ? AND (elderly_user_id = ? OR assistant_user_id = ?)',
+      [sessionId, userId, userId]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    logger.error('Session membership check failed', { error: err.message });
+    return false;
+  }
+}
+
 function initialize(server) {
+  // CORS: 从环境变量读取，不再硬编码 *
+  const corsOrigin = process.env.CORS_ORIGIN || '*';
+
   io = new Server(server, {
     cors: {
-      origin: '*',
+      origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(o => o.trim()),
       methods: ['GET', 'POST'],
     },
   });
@@ -39,98 +56,127 @@ function initialize(server) {
     const userId = socket.user?.id;
     logger.info('Client connected', { socketId: socket.id, userId });
 
-    // 用户上线（也支持客户端主动发送 user_online）
+    // 用户上线 — 使用 JWT 中的 userId，不信任客户端传值
     if (userId) {
       onlineUsers.set(String(userId), socket.id);
     }
 
-    socket.on('user_online', (uid) => {
-      onlineUsers.set(String(uid), socket.id);
-      logger.info('User online', { userId: uid });
+    // user_online 事件已不再需要，上线在 connection 时自动处理
+    // 保留兼容：忽略客户端传入的 uid，只用 JWT 身份
+    socket.on('user_online', () => {
+      if (userId) {
+        onlineUsers.set(String(userId), socket.id);
+        logger.info('User online', { userId });
+      }
     });
 
     // 加入会话房间（校验用户是否属于该会话）
     socket.on('join_session', async (sessionId) => {
-      socket.join(`session_${sessionId}`);
-      // 记录用户加入的会话
-      if (userId) {
-        if (!userSessions.has(String(userId))) {
-          userSessions.set(String(userId), new Set());
-        }
-        userSessions.get(String(userId)).add(String(sessionId));
+      const sid = parseInt(sessionId);
+      if (isNaN(sid) || sid <= 0) return;
+
+      if (!userId || !(await isSessionMember(userId, sid))) {
+        logger.warn('Unauthorized join_session attempt', { userId, sessionId: sid });
+        return;
       }
-      logger.debug('User joined session', { socketId: socket.id, userId, sessionId });
+
+      socket.join(`session_${sid}`);
+      if (!userSessions.has(String(userId))) {
+        userSessions.set(String(userId), new Set());
+      }
+      userSessions.get(String(userId)).add(String(sid));
+      logger.debug('User joined session', { socketId: socket.id, userId, sessionId: sid });
     });
+
+    // 通用会话事件处理（带权限校验）
+    function handleSessionEvent(eventName, data, handler) {
+      const sid = parseInt(data?.sessionId);
+      if (isNaN(sid) || sid <= 0) return;
+      if (!userSessions.get(String(userId))?.has(String(sid))) {
+        logger.warn(`Unauthorized ${eventName} attempt`, { userId, sessionId: sid });
+        return;
+      }
+      handler(sid);
+    }
 
     // 发送截图
     socket.on('screenshot', (data) => {
-      socket.to(`session_${data.sessionId}`).emit('screenshot', data);
-      saveMessage(data.sessionId, userId, 'screenshot', null, data.image);
+      handleSessionEvent('screenshot', data, (sid) => {
+        socket.to(`session_${sid}`).emit('screenshot', data);
+        saveMessage(sid, userId, 'screenshot', null, data.image);
+      });
     });
 
     // 发送标注
     socket.on('annotation', (data) => {
-      socket.to(`session_${data.sessionId}`).emit('annotation', data);
-      const imageData = data.annotation?.imageBase64 || null;
-      saveMessage(data.sessionId, userId, 'annotation', null, imageData);
+      handleSessionEvent('annotation', data, (sid) => {
+        socket.to(`session_${sid}`).emit('annotation', data);
+        const imageData = data.annotation?.imageBase64 || null;
+        saveMessage(sid, userId, 'annotation', null, imageData);
+      });
     });
 
     // 发送文字消息
     socket.on('message', (data) => {
-      socket.to(`session_${data.sessionId}`).emit('message', data);
-      saveMessage(data.sessionId, userId, 'text', data.message, null);
+      handleSessionEvent('message', data, (sid) => {
+        socket.to(`session_${sid}`).emit('message', data);
+        saveMessage(sid, userId, 'text', data.message, null);
+      });
     });
 
     // 结束会话
     socket.on('end_session', async (data) => {
-      io.to(`session_${data.sessionId}`).emit('session_ended', data);
-      // 更新数据库状态
-      try {
-        await db.query(
-          `UPDATE remote_sessions SET status = 'completed', ended_at = NOW()
-           WHERE id = ? AND status IN ('requested', 'active')`,
-          [data.sessionId]
-        );
-      } catch (err) {
-        logger.error('Failed to update session on end', { error: err.message });
-      }
-      // 清理会话记录
-      if (userId) {
-        const sessions = userSessions.get(String(userId));
-        if (sessions) {
-          sessions.delete(String(data.sessionId));
+      handleSessionEvent('end_session', data, async (sid) => {
+        io.to(`session_${sid}`).emit('session_ended', { sessionId: sid });
+        try {
+          await db.query(
+            `UPDATE remote_sessions SET status = 'completed', ended_at = NOW()
+             WHERE id = ? AND status IN ('requested', 'active')`,
+            [sid]
+          );
+        } catch (err) {
+          logger.error('Failed to update session on end', { error: err.message });
         }
-      }
+        const sessions = userSessions.get(String(userId));
+        if (sessions) sessions.delete(String(sid));
+      });
     });
 
     // 发送教程卡片
     socket.on('tutorial', (data) => {
-      socket.to(`session_${data.sessionId}`).emit('tutorial', data);
-      const tutorialData = data.tutorial ? JSON.stringify(data.tutorial) : null;
-      saveMessage(data.sessionId, userId, 'tutorial', tutorialData, null);
+      handleSessionEvent('tutorial', data, (sid) => {
+        socket.to(`session_${sid}`).emit('tutorial', data);
+        const tutorialData = data.tutorial ? JSON.stringify(data.tutorial) : null;
+        saveMessage(sid, userId, 'tutorial', tutorialData, null);
+      });
     });
 
     // 发送引导标记
     socket.on('guide_mark', (data) => {
-      socket.to(`session_${data.sessionId}`).emit('guide_mark', data);
-      const markData = data.mark ? JSON.stringify(data.mark) : null;
-      saveMessage(data.sessionId, userId, 'guide_mark', markData, null);
+      handleSessionEvent('guide_mark', data, (sid) => {
+        socket.to(`session_${sid}`).emit('guide_mark', data);
+        const markData = data.mark ? JSON.stringify(data.mark) : null;
+        saveMessage(sid, userId, 'guide_mark', markData, null);
+      });
     });
 
     // 确认引导完成
     socket.on('guide_confirm', (data) => {
-      socket.to(`session_${data.sessionId}`).emit('guide_confirm', data);
+      handleSessionEvent('guide_confirm', data, (sid) => {
+        socket.to(`session_${sid}`).emit('guide_confirm', data);
+      });
     });
 
     // 屏幕共享帧
     socket.on('screen_frame', (data) => {
-      socket.to(`session_${data.sessionId}`).emit('screen_frame', data);
+      handleSessionEvent('screen_frame', data, (sid) => {
+        socket.to(`session_${sid}`).emit('screen_frame', data);
+      });
     });
 
     // 断开连接
     socket.on('disconnect', async () => {
       if (userId) {
-        // 仅当当前 socketId 匹配时才删除（同一用户可能多设备连接）
         if (onlineUsers.get(String(userId)) === socket.id) {
           onlineUsers.delete(String(userId));
         }
@@ -140,13 +186,11 @@ function initialize(server) {
         if (sessions && sessions.size > 0) {
           for (const sessionId of sessions) {
             try {
-              // 将会话状态更新为 completed
               await db.query(
                 `UPDATE remote_sessions SET status = 'completed', ended_at = NOW()
                  WHERE id = ? AND status = 'active'`,
                 [sessionId]
               );
-              // 通知房间内其他用户
               io.to(`session_${sessionId}`).emit('session_ended', {
                 sessionId: parseInt(sessionId),
                 reason: 'disconnected',
@@ -199,8 +243,9 @@ async function saveMessage(sessionId, senderId, messageType, content, imageData)
 
 /// 获取会话的历史消息
 async function getSessionMessages(sessionId, { page = 1, pageSize = 50 } = {}) {
-  const size = Math.min(Math.max(1, pageSize), 100);
-  const offset = (Math.max(1, page) - 1) * size;
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const size = Math.min(Math.max(1, parseInt(pageSize) || 50), 100);
+  const offset = (pageNum - 1) * size;
 
   const [messages] = await db.query(
     `SELECT cm.*, u.name as sender_name

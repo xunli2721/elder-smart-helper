@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:elder_smart_helper/providers/font_size_provider.dart';
+import 'package:elder_smart_helper/config/theme.dart';
 import 'package:elder_smart_helper/services/api_service.dart';
 import 'package:elder_smart_helper/services/socket_service.dart';
 import 'package:elder_smart_helper/services/screen_capture_service.dart';
@@ -333,7 +334,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                     final t = tutorials[index];
                     return ListTile(
                       leading: const Icon(Icons.menu_book,
-                          color: Color(0xFF4A90E2)),
+                          color: AppColors.primary),
                       title: Text(t.title),
                       subtitle: Text(t.description,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -764,6 +765,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
 
   @override
   void dispose() {
+    _frameSubscription?.cancel();
     SocketService.removeAllListeners();
     SocketService.disconnect();
     _messageController.dispose();
@@ -785,7 +787,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       return _buildChatScreen();
     }
 
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Scaffold(
       appBar: AppBar(
         title: const Text('远程协助'),
@@ -975,7 +977,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   }
 
   Widget _buildChatScreen() {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Scaffold(
       appBar: AppBar(
         title: Text(_isSharingScreen ? '正在共享屏幕' : '远程协助中'),
@@ -1059,11 +1061,11 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Icon(Icons.camera_alt,
-                        color: Color(0xFF4A90E2), size: 24),
+                        color: AppColors.primary, size: 24),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1072,11 +1074,11 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Icon(Icons.menu_book,
-                        color: Color(0xFF4A90E2), size: 24),
+                        color: AppColors.primary, size: 24),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1098,7 +1100,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                 const SizedBox(width: 8),
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: const Color(0xFF4A90E2),
+                  backgroundColor: AppColors.primary,
                   child: IconButton(
                     icon: const Icon(Icons.send,
                         color: Colors.white, size: 24),
@@ -1119,7 +1121,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
       height: 280,
       margin: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF4A90E2), width: 2),
+        border: Border.all(color: AppColors.primary, width: 2),
         borderRadius: BorderRadius.circular(12),
       ),
       child: ClipRRect(
@@ -1224,7 +1226,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
   }
 
   Widget _buildMessageBubble(Map<String, dynamic> msg) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     final isMe = msg['isMe'] as bool;
     final type = msg['type'] as String? ?? 'text';
 
@@ -1269,7 +1271,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                 children: [
                   Icon(Icons.menu_book,
                       size: 20,
-                      color: isMe ? Colors.white70 : const Color(0xFF4A90E2)),
+                      color: isMe ? Colors.white70 : AppColors.primary),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -1300,7 +1302,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
                 '点击查看教程 >',
                 style: TextStyle(
                   fontSize: s(14),
-                  color: isMe ? Colors.white : const Color(0xFF4A90E2),
+                  color: isMe ? Colors.white : AppColors.primary,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -1316,7 +1318,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         child: Column(
           children: [
             Icon(Icons.touch_app, size: 32,
-                color: isMe ? Colors.white : const Color(0xFF4A90E2)),
+                color: isMe ? Colors.white : AppColors.primary),
             const SizedBox(height: 8),
             Text(
               '已发送 $markCount 个引导标记',
@@ -1387,7 +1389,7 @@ class _RemoteAssistScreenState extends State<RemoteAssistScreen> {
         constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.7),
         decoration: BoxDecoration(
-          color: isMe ? const Color(0xFF4A90E2) : Colors.grey[200],
+          color: isMe ? AppColors.primary : Colors.grey[200],
           borderRadius: BorderRadius.circular(16),
         ),
         child: ClipRRect(

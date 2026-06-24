@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 class TtsService {
@@ -27,7 +28,7 @@ class TtsService {
     });
     _tts.setErrorHandler((msg) {
       _isSpeaking = false;
-      print('TTS Error: $msg');
+      debugPrint('TTS Error: $msg');
     });
   }
 

@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
+import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../main.dart';
 import 'login_screen.dart';
@@ -69,7 +70,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF4A90E2),
+      backgroundColor: AppColors.primary,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -79,7 +80,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Text(
               '智能助手',
               style: TextStyle(
-                fontSize: context.read<FontSizeProvider>().scaled(36),
+                fontSize: context.watch<FontSizeProvider>().scaled(36),
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
@@ -87,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 8),
             Text(
               '中老年人智能手机助手',
-              style: TextStyle(fontSize: context.read<FontSizeProvider>().scaled(18), color: Colors.white70),
+              style: TextStyle(fontSize: context.watch<FontSizeProvider>().scaled(18), color: Colors.white70),
             ),
             const SizedBox(height: 48),
             const CircularProgressIndicator(color: Colors.white),

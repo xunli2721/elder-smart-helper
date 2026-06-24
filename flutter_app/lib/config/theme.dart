@@ -1,5 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 
+class AppColors {
+  static const Color primary = Color(0xFF4A90E2);
+}
+
 class AppTheme {
   static const double _fontSizeSmall = 16;
   static const double _fontSizeMedium = 18;

@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
+import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../models/tutorial.dart';
 import 'tutorial_detail_screen.dart';
@@ -51,7 +52,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Scaffold(
       appBar: AppBar(title: const Text('教程中心'), automaticallyImplyLeading: false),
       body: Column(
@@ -97,7 +98,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
   }
 
   Widget _tutorialItem(Tutorial tutorial) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     Color difficultyColor;
     String difficultyText;
     switch (tutorial.difficultyLevel) {
@@ -121,10 +122,10 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
+            color: AppColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.menu_book, size: 32, color: Color(0xFF4A90E2)),
+          child: const Icon(Icons.menu_book, size: 32, color: AppColors.primary),
         ),
         title: Row(
           children: [

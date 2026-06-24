@@ -67,8 +67,8 @@ exports.getSessions = async (req, res) => {
 
     // 分页：当传入 page 和 pageSize 时生效
     if (page && pageSize) {
-      const pageNum = Math.max(1, parseInt(page));
-      const size = Math.min(Math.max(1, parseInt(pageSize)), 100);
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      const size = Math.min(Math.max(1, parseInt(pageSize) || 50), 100);
       const offset = (pageNum - 1) * size;
       sql += ' LIMIT ? OFFSET ?';
       params.push(size, offset);

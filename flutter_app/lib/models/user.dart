@@ -15,11 +15,11 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id'],
-      phone: json['phone'],
-      name: json['name'],
-      userType: json['user_type'],
-      fontSize: json['font_size'] ?? 'large',
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id']?.toString() ?? '') ?? 0,
+      phone: json['phone']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      userType: json['user_type']?.toString() ?? 'elderly',
+      fontSize: json['font_size']?.toString() ?? 'large',
     );
   }
 }

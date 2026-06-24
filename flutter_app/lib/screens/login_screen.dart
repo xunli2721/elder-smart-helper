@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
+import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../main.dart';
 import 'register_screen.dart';
@@ -46,7 +47,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('网络错误: $e')));
+      debugPrint('login error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('网络连接失败，请检查网络后重试')));
     } finally {
       setState(() => _loading = false);
     }
@@ -61,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -70,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.phone_android, size: 80, color: Color(0xFF4A90E2)),
+                const Icon(Icons.phone_android, size: 80, color: AppColors.primary),
                 const SizedBox(height: 16),
                 Text('智能助手', style: TextStyle(fontSize: s(32), fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),

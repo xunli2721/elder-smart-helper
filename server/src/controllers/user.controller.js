@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logger = require('../utils/logger');
 
 // 通过手机号绑定家人
 exports.bindFamily = async (req, res) => {
@@ -50,7 +51,7 @@ exports.bindFamily = async (req, res) => {
 
     res.json({ success: true, message: '绑定成功' });
   } catch (err) {
-    console.error('BindFamily error:', err);
+    logger.error('BindFamily error', { error: err.message });
     res.status(500).json({ success: false, message: '绑定失败' });
   }
 };
@@ -76,7 +77,7 @@ exports.getFamily = async (req, res) => {
     const [family] = await db.query(sql, params);
     res.json({ success: true, data: family });
   } catch (err) {
-    console.error('GetFamily error:', err);
+    logger.error('GetFamily error', { error: err.message });
     res.status(500).json({ success: false, message: '获取家人列表失败' });
   }
 };
@@ -95,7 +96,7 @@ exports.unbindFamily = async (req, res) => {
 
     res.json({ success: true, message: '解除绑定成功' });
   } catch (err) {
-    console.error('UnbindFamily error:', err);
+    logger.error('UnbindFamily error', { error: err.message });
     res.status(500).json({ success: false, message: '解除绑定失败' });
   }
 };
@@ -119,7 +120,7 @@ exports.updateSettings = async (req, res) => {
 
     res.json({ success: true, message: '更新成功' });
   } catch (err) {
-    console.error('UpdateSettings error:', err);
+    logger.error('UpdateSettings error', { error: err.message });
     res.status(500).json({ success: false, message: '更新失败' });
   }
 };
@@ -136,7 +137,7 @@ exports.getOnlineStatus = async (req, res) => {
     const statusMap = socketService.getOnlineStatus(userIds);
     res.json({ success: true, data: statusMap });
   } catch (err) {
-    console.error('GetOnlineStatus error:', err);
+    logger.error('GetOnlineStatus error', { error: err.message });
     res.status(500).json({ success: false, message: '查询在线状态失败' });
   }
 };

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
+import '../config/theme.dart';
 import '../services/api_service.dart';
 import 'login_screen.dart';
 
@@ -126,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Scaffold(
       appBar: AppBar(title: const Text('设置'), automaticallyImplyLeading: false),
       body: ListView(
@@ -144,7 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 4),
                   Text(_phone, style: TextStyle(fontSize: s(18), color: Colors.grey)),
                   const SizedBox(height: 4),
-                  Text(_userType == 'elderly' ? '老人用户' : '家人用户', style: TextStyle(fontSize: s(16), color: const Color(0xFF4A90E2))),
+                  Text(_userType == 'elderly' ? '老人用户' : '家人用户', style: TextStyle(fontSize: s(16), color: AppColors.primary)),
                 ],
               ),
             ),
@@ -273,7 +274,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _fontSizeOption(String size, String label, double previewSize) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     final isSelected = _fontSize == size;
     return GestureDetector(
       onTap: () => _updateFontSize(size),
@@ -283,7 +284,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF4A90E2) : Colors.grey[200],
+              color: isSelected ? AppColors.primary : Colors.grey[200],
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
@@ -294,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text(label, style: TextStyle(
             fontSize: s(16),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? const Color(0xFF4A90E2) : Colors.black87,
+            color: isSelected ? AppColors.primary : Colors.black87,
           )),
         ],
       ),
@@ -302,7 +303,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _speechRateOption(String rate, String label) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     final isSelected = _speechRate == rate;
     IconData icon;
     switch (rate) {
@@ -326,7 +327,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF4A90E2) : Colors.grey[200],
+              color: isSelected ? AppColors.primary : Colors.grey[200],
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
@@ -337,7 +338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text(label, style: TextStyle(
             fontSize: s(16),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? const Color(0xFF4A90E2) : Colors.black87,
+            color: isSelected ? AppColors.primary : Colors.black87,
           )),
         ],
       ),
@@ -345,7 +346,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildBindFamilyCard() {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),

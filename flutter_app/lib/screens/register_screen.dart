@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
+import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../main.dart';
 
@@ -47,7 +48,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('网络错误: $e')));
+      debugPrint('register error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('网络连接失败，请检查网络后重试')));
     } finally {
       setState(() => _loading = false);
     }
@@ -63,7 +65,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Scaffold(
       appBar: AppBar(title: const Text('注册')),
       body: Padding(
@@ -101,7 +103,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: _userType == 'elderly' ? const Color(0xFF4A90E2) : Colors.grey[200],
+                        color: _userType == 'elderly' ? AppColors.primary : Colors.grey[200],
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -125,7 +127,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: _userType == 'family' ? const Color(0xFF4A90E2) : Colors.grey[200],
+                        color: _userType == 'family' ? AppColors.primary : Colors.grey[200],
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(

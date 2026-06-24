@@ -1,4 +1,5 @@
 const securityService = require('../services/securityService');
+const logger = require('../utils/logger');
 
 /**
  * 检测诈骗风险
@@ -13,7 +14,7 @@ exports.checkFraud = async (req, res) => {
     const result = await securityService.detectFraud(text, req.user.id);
     res.json({ success: true, data: result });
   } catch (err) {
-    console.error('CheckFraud error:', err);
+    logger.error('CheckFraud error', { error: err.message });
     res.status(500).json({ success: false, message: '检测失败' });
   }
 };
@@ -31,7 +32,7 @@ exports.checkPayment = async (req, res) => {
     const result = await securityService.detectPaymentRisk(amount, req.user.id);
     res.json({ success: true, data: result });
   } catch (err) {
-    console.error('CheckPayment error:', err);
+    logger.error('CheckPayment error', { error: err.message });
     res.status(500).json({ success: false, message: '检测失败' });
   }
 };
@@ -49,7 +50,7 @@ exports.getEvents = async (req, res) => {
     });
     res.json({ success: true, data: result.events, pagination: result.pagination });
   } catch (err) {
-    console.error('GetEvents error:', err);
+    logger.error('GetEvents error', { error: err.message });
     res.status(500).json({ success: false, message: '获取安全事件失败' });
   }
 };
@@ -65,7 +66,7 @@ exports.resolveEvent = async (req, res) => {
     }
     res.json({ success: true, message: '已标记为已解决' });
   } catch (err) {
-    console.error('ResolveEvent error:', err);
+    logger.error('ResolveEvent error', { error: err.message });
     res.status(500).json({ success: false, message: '操作失败' });
   }
 };
@@ -78,7 +79,7 @@ exports.getStats = async (req, res) => {
     const stats = await securityService.getSecurityStats(req.user.id);
     res.json({ success: true, data: stats });
   } catch (err) {
-    console.error('GetStats error:', err);
+    logger.error('GetStats error', { error: err.message });
     res.status(500).json({ success: false, message: '获取统计失败' });
   }
 };

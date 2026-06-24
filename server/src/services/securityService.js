@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logger = require('../utils/logger');
 
 /**
  * 安全服务 - 诈骗检测和风险预警
@@ -143,7 +144,7 @@ async function detectPaymentRisk(amount, userId) {
       });
     }
   } catch (err) {
-    console.error('Payment risk check error:', err);
+    logger.error('Payment risk check error', { error: err.message });
   }
 
   // 记录安全事件
@@ -172,7 +173,7 @@ async function logSecurityEvent(userId, eventType, severity, description, metada
       [userId, eventType, severity, description, JSON.stringify(metadata)]
     );
   } catch (err) {
-    console.error('Log security event error:', err);
+    logger.error('Log security event error', { error: err.message });
   }
 }
 
@@ -211,7 +212,7 @@ async function getSecurityEvents(userId, { page = 1, pageSize = 20, severity } =
       },
     };
   } catch (err) {
-    console.error('Get security events error:', err);
+    logger.error('Get security events error', { error: err.message });
     throw err;
   }
 }
@@ -222,12 +223,12 @@ async function getSecurityEvents(userId, { page = 1, pageSize = 20, severity } =
 async function resolveSecurityEvent(eventId, resolvedBy) {
   try {
     const [result] = await db.query(
-      `UPDATE security_events SET is_resolved = TRUE, resolved_at = NOW(), resolved_by = ? WHERE id = ?`,
-      [resolvedBy, eventId]
+      `UPDATE security_events SET is_resolved = TRUE, resolved_at = NOW(), resolved_by = ? WHERE id = ? AND user_id = ?`,
+      [resolvedBy, eventId, resolvedBy]
     );
     return result.affectedRows > 0;
   } catch (err) {
-    console.error('Resolve security event error:', err);
+    logger.error('Resolve security event error', { error: err.message });
     throw err;
   }
 }
@@ -249,7 +250,7 @@ async function getSecurityStats(userId) {
     );
     return rows[0];
   } catch (err) {
-    console.error('Get security stats error:', err);
+    logger.error('Get security stats error', { error: err.message });
     throw err;
   }
 }

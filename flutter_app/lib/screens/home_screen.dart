@@ -9,6 +9,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import '../providers/font_size_provider.dart';
+import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../models/tutorial.dart';
 import 'tutorial_detail_screen.dart';
@@ -122,7 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('打开「$label」失败: $e')),
+        SnackBar(content: Text('打开「$label」失败，请重试')),
       );
     }
   }
@@ -228,8 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // 检测微信相关域名，跳转微信打开
       final host = uri.host.toLowerCase();
       if (host.contains('weixin.qq.com') ||
-          host.contains('wechat.com') ||
-          host.contains('weixin.qq.com')) {
+          host.contains('wechat.com')) {
         final wechatUri = Uri.parse('weixin://');
         if (await canLaunchUrl(wechatUri)) {
           await launchUrl(wechatUri,
@@ -341,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Scaffold(
       appBar: AppBar(title: const Text('智能助手'), automaticallyImplyLeading: false),
       body: RefreshIndicator(
@@ -354,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF4A90E2),
+                color: AppColors.primary,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -405,7 +405,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _quickAccess(IconData icon, String label) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return GestureDetector(
       onTap: () => _onQuickAccessTap(label),
       child: Column(
@@ -414,10 +414,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, size: 32, color: const Color(0xFF4A90E2)),
+            child: Icon(icon, size: 32, color: AppColors.primary),
           ),
           const SizedBox(height: 4),
           Text(label, style: TextStyle(fontSize: s(14)), textAlign: TextAlign.center),
@@ -427,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _tutorialCard(Tutorial tutorial) {
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -435,10 +435,10 @@ class _HomeScreenState extends State<HomeScreen> {
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF4A90E2).withValues(alpha: 0.1),
+            color: AppColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.menu_book, size: 32, color: Color(0xFF4A90E2)),
+          child: const Icon(Icons.menu_book, size: 32, color: AppColors.primary),
         ),
         title: Text(tutorial.title, style: TextStyle(fontSize: s(20), fontWeight: FontWeight.bold)),
         subtitle: Text(tutorial.description, style: TextStyle(fontSize: s(16)), maxLines: 2, overflow: TextOverflow.ellipsis),

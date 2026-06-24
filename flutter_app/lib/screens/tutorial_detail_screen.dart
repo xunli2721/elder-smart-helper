@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/font_size_provider.dart';
+import '../config/theme.dart';
 import '../services/tts_service.dart';
 import '../models/tutorial.dart';
 
@@ -69,8 +70,14 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final steps = widget.tutorial.steps;
+    if (steps.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.tutorial.title)),
+        body: const Center(child: Text('暂无教程步骤')),
+      );
+    }
     final step = steps[_currentStep];
-    final s = context.read<FontSizeProvider>().scaled;
+    final s = context.watch<FontSizeProvider>().scaled;
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.tutorial.title)),
@@ -87,7 +94,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
                   width: index == _currentStep ? 24 : 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: index == _currentStep ? const Color(0xFF4A90E2) : Colors.grey[300],
+                    color: index == _currentStep ? AppColors.primary : Colors.grey[300],
                     borderRadius: BorderRadius.circular(6),
                   ),
                 );
@@ -100,7 +107,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
               width: 80,
               height: 80,
               decoration: const BoxDecoration(
-                color: Color(0xFF4A90E2),
+                color: AppColors.primary,
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -129,13 +136,13 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _isSpeaking ? Colors.orange : const Color(0xFF4A90E2).withValues(alpha: 0.1),
+                      color: _isSpeaking ? Colors.orange : AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Icon(
                       _isSpeaking ? Icons.stop_circle : Icons.volume_up,
                       size: 28,
-                      color: _isSpeaking ? Colors.white : const Color(0xFF4A90E2),
+                      color: _isSpeaking ? Colors.white : AppColors.primary,
                     ),
                   ),
                 ),
@@ -156,7 +163,7 @@ class _TutorialDetailScreenState extends State<TutorialDetailScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.touch_app, size: 60, color: Color(0xFF4A90E2)),
+                    const Icon(Icons.touch_app, size: 60, color: AppColors.primary),
                     const SizedBox(height: 16),
                     Text(
                       step.description,

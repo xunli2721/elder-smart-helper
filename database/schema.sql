@@ -61,8 +61,8 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
     started_at TIMESTAMP NULL,
     ended_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (elderly_user_id) REFERENCES users(id),
-    FOREIGN KEY (assistant_user_id) REFERENCES users(id),
+    FOREIGN KEY (elderly_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (assistant_user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_elderly_user (elderly_user_id),
     INDEX idx_assistant (assistant_user_id),
     INDEX idx_status (status)
@@ -98,15 +98,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES remote_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (sender_id) REFERENCES users(id),
-    INDEX idx_session_id (session_id),
-    INDEX idx_created_at (created_at)
+    INDEX idx_session_created (session_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Security events table (securityService depends on this)
 CREATE TABLE IF NOT EXISTS security_events (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
-    event_type ENUM('fraud_detected', 'suspicious_link', 'payment_attempt', 'risk_warning') NOT NULL,
+    event_type ENUM('fraud_detected', 'suspicious_link', 'payment_attempt', 'unusual_behavior', 'risk_warning') NOT NULL,
     severity ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
     description TEXT,
     metadata JSON,
